@@ -3,6 +3,11 @@ declare const process: {
   platform: string;
 };
 
+declare const Buffer: {
+  from(input: string | Uint8Array, encoding?: string): any;
+  concat(chunks: any[]): any;
+};
+
 declare module "node:child_process" {
   export function spawn(
     command: string,
@@ -12,6 +17,20 @@ declare module "node:child_process" {
       windowsHide?: boolean;
     },
   ): any;
+}
+
+declare module "node:crypto" {
+  export function createCipheriv(
+    algorithm: string,
+    key: any,
+    iv: any,
+  ): any;
+  export function createDecipheriv(
+    algorithm: string,
+    key: any,
+    iv: any,
+  ): any;
+  export function randomBytes(size: number): any;
 }
 
 declare module "node:http" {

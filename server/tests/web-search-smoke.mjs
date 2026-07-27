@@ -11,6 +11,19 @@ const restartAppPort = 18785;
 const tempDir = await mkdtemp(join(tmpdir(), "learning-app-test-"));
 const storePath = join(tempDir, "store.json");
 const fallbackStorePath = join(tempDir, "fallback-store.json");
+const generatedCourseAnalysis = {
+  courseType: "项目实战",
+  targetOutcome: "能够完成并验证一个实时数据处理流程",
+  priorKnowledge: "具备 Java 与 Spring 基础",
+  depth: "standard",
+  estimatedHours: 40,
+  sessionMinutes: 45,
+  assumptions: ["使用稳定版本进行学习"],
+  researchQueries: [
+    "Flink Spring 集成 官方文档",
+    "Flink 状态管理 Checkpoint 实践",
+  ],
+};
 const generatedOutline = {
   audience: "具备基础计算机操作能力的初学者",
   courseGoal: "能够独立完成一个可部署的小型项目并进行测试与复盘",
@@ -23,9 +36,9 @@ const generatedOutline = {
       prerequisites: [],
       estimatedHours: 5,
       sections: [
-        { title: "认识核心术语", kind: "concept", outcome: "能够解释三个核心术语" },
-        { title: "搭建运行环境", kind: "practice", outcome: "能够运行第一个示例" },
-        { title: "基础阶段复盘", kind: "review", outcome: "能够识别常见配置错误" },
+        { title: "认识核心术语", kind: "concept", outcome: "能够解释三个核心术语", estimatedMinutes: 45, practiceMinutes: 10, sourceRefs: [1] },
+        { title: "搭建运行环境", kind: "practice", outcome: "能够运行第一个示例", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [1] },
+        { title: "基础阶段复盘", kind: "review", outcome: "能够识别常见配置错误", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [2] },
       ],
     },
     {
@@ -35,9 +48,9 @@ const generatedOutline = {
       prerequisites: ["核心术语", "运行环境"],
       estimatedHours: 7,
       sections: [
-        { title: "拆解问题步骤", kind: "concept", outcome: "能够把目标拆成步骤" },
-        { title: "实现基础功能", kind: "practice", outcome: "能够完成基础功能" },
-        { title: "方法阶段项目", kind: "project", outcome: "能够交付可运行功能" },
+        { title: "拆解问题步骤", kind: "concept", outcome: "能够把目标拆成步骤", estimatedMinutes: 45, practiceMinutes: 15, sourceRefs: [1] },
+        { title: "实现基础功能", kind: "practice", outcome: "能够完成基础功能", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [2] },
+        { title: "方法阶段项目", kind: "project", outcome: "能够交付可运行功能", estimatedMinutes: 60, practiceMinutes: 60, sourceRefs: [2] },
       ],
     },
     {
@@ -47,9 +60,9 @@ const generatedOutline = {
       prerequisites: ["基础功能实现"],
       estimatedHours: 8,
       sections: [
-        { title: "设计模块边界", kind: "concept", outcome: "能够划分模块职责" },
-        { title: "组合多个模块", kind: "practice", outcome: "能够完成模块集成" },
-        { title: "流程集成项目", kind: "project", outcome: "能够演示完整流程" },
+        { title: "设计模块边界", kind: "concept", outcome: "能够划分模块职责", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [1] },
+        { title: "组合多个模块", kind: "practice", outcome: "能够完成模块集成", estimatedMinutes: 60, practiceMinutes: 45, sourceRefs: [2] },
+        { title: "流程集成项目", kind: "project", outcome: "能够演示完整流程", estimatedMinutes: 60, practiceMinutes: 90, sourceRefs: [1, 2] },
       ],
     },
     {
@@ -59,9 +72,9 @@ const generatedOutline = {
       prerequisites: ["完整流程组织"],
       estimatedHours: 9,
       sections: [
-        { title: "识别异常边界", kind: "concept", outcome: "能够列出异常场景" },
-        { title: "实施可靠性改进", kind: "practice", outcome: "能够修复关键缺陷" },
-        { title: "复杂场景演练", kind: "project", outcome: "能够通过异常测试" },
+        { title: "识别异常边界", kind: "concept", outcome: "能够列出异常场景", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [1] },
+        { title: "实施可靠性改进", kind: "practice", outcome: "能够修复关键缺陷", estimatedMinutes: 60, practiceMinutes: 45, sourceRefs: [2] },
+        { title: "复杂场景演练", kind: "project", outcome: "能够通过异常测试", estimatedMinutes: 60, practiceMinutes: 90, sourceRefs: [1, 2] },
       ],
     },
     {
@@ -71,9 +84,24 @@ const generatedOutline = {
       prerequisites: ["可靠性改进"],
       estimatedHours: 11,
       sections: [
-        { title: "定义项目验收标准", kind: "concept", outcome: "能够编写验收清单" },
-        { title: "完成综合项目", kind: "project", outcome: "能够交付完整项目" },
-        { title: "项目复盘与改进", kind: "review", outcome: "能够形成改进计划" },
+        { title: "定义项目验收标准", kind: "concept", outcome: "能够编写验收清单", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [1] },
+        { title: "完成综合项目", kind: "project", outcome: "能够交付完整项目", estimatedMinutes: 90, practiceMinutes: 120, sourceRefs: [1, 2] },
+        { title: "项目复盘与改进", kind: "review", outcome: "能够形成改进计划", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [2] },
+      ],
+    },
+  ],
+};
+
+const incompleteOutline = {
+  audience: "准备进行系统学习的用户",
+  courseGoal: "完成课程目标",
+  estimatedHours: 40,
+  chapters: [
+    {
+      title: "基础认知",
+      sections: [
+        { title: "核心概念" },
+        { title: "基本方法" },
       ],
     },
   ],
@@ -133,9 +161,17 @@ const generatedPolishPatches = {
 };
 const generatedProjectDescription = {
   description:
-    "面向具备基础编程能力的学习者，系统掌握 Flink 在 Spring 项目中的集成方式、数据流处理与状态管理，通过渐进练习完成一个可运行、可验证的实时数据处理模块。",
+    "围绕 Flink 在 Spring 项目中的集成方式，覆盖运行环境、数据流 API、时间与窗口、状态管理、Checkpoint 及常用连接器。内容按照核心概念、配置方法、典型场景和练习验证组织，使课程从基础机制逐步过渡到实时数据处理实践。",
+};
+const generatedPreferenceRecommendations = {
+  learningGoal: "解决实际问题",
+  currentLevel: null,
+  coveragePreference: "标准覆盖",
+  timeBudget: null,
+  sessionLength: null,
 };
 let searchRequestCount = 0;
+let outlineRepairRequestCount = 0;
 
 const providerServer = createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -188,10 +224,23 @@ const providerServer = createServer(async (req, res) => {
       ? JSON.stringify(generatedLessonContent)
       : systemPrompt.includes("AI 助教")
         ? "这是结合当前小节内容生成的助教回答。"
+        : systemPrompt.includes("固定选项")
+          ? JSON.stringify(generatedPreferenceRecommendations)
         : systemPrompt.includes("项目描述生成 Agent")
           ? JSON.stringify(generatedProjectDescription)
+        : systemPrompt.includes("课程规划的第一步")
+          ? JSON.stringify(generatedCourseAnalysis)
         : systemPrompt.includes("课程文案润色 Agent")
           ? JSON.stringify(generatedPolishPatches)
+        : systemPrompt.includes("修复课程大纲的结构错误")
+          ? (
+              outlineRepairRequestCount += 1,
+              JSON.stringify(generatedOutline)
+            )
+        : systemPrompt.includes("课程发布前检查")
+          ? JSON.stringify(generatedOutline)
+        : systemPrompt.includes("把课程范围编排成可学习的大纲")
+          ? JSON.stringify(incompleteOutline)
         : JSON.stringify(generatedOutline);
     res.end(
       JSON.stringify({
@@ -289,10 +338,31 @@ try {
     },
   );
   if (
-    !generatedDescription.description.includes("实时数据处理模块") ||
+    !generatedDescription.description.includes("实时数据处理") ||
     searchRequestCount !== 0
   ) {
     throw new Error("expected an AI-generated description without web search");
+  }
+
+  const preferenceRecommendations = await request(
+    "/api/projects/suggest-preferences",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        topic: "Flink 在 Spring 项目中的应用",
+        description: generatedDescription.description,
+      }),
+    },
+  );
+  if (
+    preferenceRecommendations.recommendations.learningGoal !==
+      "解决实际问题" ||
+    preferenceRecommendations.recommendations.coveragePreference !==
+      "标准覆盖" ||
+    "currentLevel" in preferenceRecommendations.recommendations ||
+    "timeBudget" in preferenceRecommendations.recommendations
+  ) {
+    throw new Error("expected only evidence-backed fixed preference options");
   }
 
   const created = await request("/api/projects", {
@@ -305,7 +375,15 @@ try {
 
   const generated = await request(
     `/api/projects/${encodeURIComponent(created.project.id)}/generate-outline`,
-    { method: "POST" },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        preferences: {
+          learningGoal: "解决实际问题",
+          coveragePreference: "标准覆盖",
+        },
+      }),
+    },
   );
 
   if (generated.project.sources.length !== 2) {
@@ -314,8 +392,14 @@ try {
   if (!generated.project.generation.webSearchUsed) {
     throw new Error("expected webSearchUsed to be true");
   }
+  if (generated.project.generation.outlineStatus !== "draft") {
+    throw new Error("expected an unaudited outline to be marked as draft");
+  }
   if (generated.project.chapters.length !== 5) {
     throw new Error("expected generated chapters");
+  }
+  if (outlineRepairRequestCount !== 1) {
+    throw new Error("expected one automatic outline repair request");
   }
   const difficulties = generated.project.chapters.map((chapter) => chapter.difficulty);
   if (difficulties.join(",") !== "1,2,3,4,5") {
@@ -323,6 +407,11 @@ try {
   }
   if (!generated.project.outlineSummary?.courseGoal) {
     throw new Error("expected persisted course blueprint");
+  }
+  if (
+    generated.project.outlinePreferences?.coveragePreference !== "标准覆盖"
+  ) {
+    throw new Error("expected coverage preference to reach outline planning");
   }
   if (generated.project.chapters[0].sections[0].status !== "current") {
     throw new Error("expected first section to be current");
@@ -391,7 +480,7 @@ try {
   if (
     optimized.project.generation.generatedAt !== generatedAtBeforePolish ||
     optimized.project.sources.length !== 2 ||
-    searchRequestCount !== 1
+    searchRequestCount !== generatedCourseAnalysis.researchQueries.length
   ) {
     throw new Error("polishing must preserve generation metadata and skip web search");
   }
@@ -563,6 +652,9 @@ try {
   );
   if (fallbackGenerated.project.generation.webSearchUsed) {
     throw new Error("fallback generation must not use web search");
+  }
+  if (fallbackGenerated.project.generation.outlineStatus !== "fallback") {
+    throw new Error("expected fallback content to be marked explicitly");
   }
   if (!fallbackGenerated.project.generation.warning?.includes("跳过联网检索")) {
     throw new Error("expected a clear no-key fallback warning");

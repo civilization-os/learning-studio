@@ -30,7 +30,7 @@ Learning Studio is a local-first web application for building and following pers
 - **Generated lesson experiences** — create mind maps, core explanations, examples, and interactive exercises for each section.
 - **Contextual AI tutor** — ask for a simpler explanation, an example, a summary, or a new question based on the current lesson.
 - **Official model discovery** — load available models from the configured DeepSeek `/models` endpoint instead of hard-coding model names.
-- **Local persistence** — store projects and learning progress locally; protect saved API keys with Windows DPAPI.
+- **Local persistence** — store projects and learning progress locally; protect saved API keys with Windows DPAPI or AES-256-GCM.
 - **Responsive PWA interface** — installable app shell with layouts designed for mobile, desktop, and ultra-wide screens.
 
 ## How it works
@@ -42,7 +42,7 @@ flowchart LR
     Agents --> DeepSeek["DeepSeek API"]
     Agents --> Search["Tavily Web Search"]
     API --> Store["Local JSON store"]
-    Store --> DPAPI["Windows DPAPI-protected secrets"]
+    Store --> Secrets["Platform-aware secret protection"]
 ```
 
 The frontend never writes provider keys into browser storage or project files. It talks to a local backend, which coordinates agents, calls external providers, caches generated lesson content, and persists project state.
@@ -64,9 +64,7 @@ The frontend never writes provider keys into browser storage or project files. I
 - npm
 - A DeepSeek API key for AI generation
 - Optional: a Tavily API key for Web Search-assisted outlines
-- Windows 10/11 is recommended when saving credentials through the UI because the current secure persistence layer uses Windows DPAPI
-
-On non-Windows systems, provider keys can be supplied through environment variables, but the current version cannot securely persist newly entered keys from the settings page.
+- Windows 10/11, or `APP_ENCRYPTION_KEY` on Linux when saving credentials through the UI
 
 ## Quick start
 
@@ -84,6 +82,19 @@ The development launcher compiles and starts both services:
 
 Open **Settings** in the app, enter your DeepSeek API key, load the official model list, test the connection, and save the configuration. Add a Tavily key only if you want Web Search enrichment.
 
+### Docker deployment
+
+For a single-origin production deployment with persistent data:
+
+```bash
+cp deploy/docker.env.example .env
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+# Put the generated value in .env as APP_ENCRYPTION_KEY
+docker compose up -d --build
+```
+
+Open `http://127.0.0.1:8080`. See the [Docker deployment guide](./docs/docker-deployment.md) before exposing the app to a network.
+
 ### Environment variables
 
 Environment variables are useful for automation or systems where UI-based secret persistence is unavailable.
@@ -93,9 +104,12 @@ Environment variables are useful for automation or systems where UI-based secret
 | `DEEPSEEK_API_KEY` | DeepSeek API credential | — |
 | `DEEPSEEK_BASE_URL` | OpenAI-compatible DeepSeek endpoint | `https://api.deepseek.com` |
 | `TAVILY_API_KEY` | Tavily Web Search credential | — |
+| `APP_ENCRYPTION_KEY` | 32-byte Base64/hex key for Linux credential persistence | — |
 | `PORT` | Local backend port | `8787` |
+| `HOST` | Backend bind address | `127.0.0.1` |
+| `CORS_ORIGINS` | Comma-separated browser origins allowed in split deployments | local Vite origins |
 | `APP_STORE_PATH` | Custom path for the local JSON store | `server/data/store.json` |
-| `VITE_API_BASE_URL` | Frontend API base URL | `http://127.0.0.1:8787/api` |
+| `VITE_API_BASE_URL` | Frontend API base URL | `/api` |
 
 PowerShell example:
 
@@ -142,7 +156,8 @@ learning-studio/
 ## Data and security
 
 - Projects and non-secret settings are stored in `server/data/store.json` by default.
-- DeepSeek and Tavily keys saved through the Windows UI are encrypted for the current Windows user with DPAPI.
+- On Windows, provider keys saved through the UI are encrypted for the current user with DPAPI.
+- On Linux, UI-entered keys use AES-256-GCM and require a deployment-provided `APP_ENCRYPTION_KEY`.
 - Raw API keys are removed from browser persistence and are not written to project files.
 - `server/data/`, `.env*`, build output, and browser-test artifacts are excluded from Git.
 - The local backend binds to the loopback interface by default.

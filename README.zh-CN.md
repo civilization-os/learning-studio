@@ -30,7 +30,7 @@ Learning Studio 是一款本地优先的 Web 学习应用。输入一个课题�
 - **完整小节内容生成**：为当前小节生成思维导图、核心讲解、示例和互动练习。
 - **上下文 AI 助教**：围绕当前课程、小节和已生成内容进行简化讲解、举例、总结或出题。
 - **官方模型获取**：从已配置的 DeepSeek `/models` 接口读取可用模型，不在代码中写死模型名称。
-- **本地数据持久化**：在本地保存项目和学习进度，并通过 Windows DPAPI 保护持久化的 API Key。
+- **本地数据持久化**：在本地保存项目和学习进度，并通过 Windows DPAPI 或 AES-256-GCM 保护 API Key。
 - **响应式 PWA**：支持安装，并针对手机、桌面和超宽屏提供自适应布局。
 
 ## 工作方式
@@ -42,7 +42,7 @@ flowchart LR
     Agents --> DeepSeek["DeepSeek API"]
     Agents --> Search["Tavily Web Search"]
     API --> Store["本地 JSON 数据"]
-    Store --> DPAPI["Windows DPAPI 密钥保护"]
+    Store --> Secrets["跨平台密钥保护"]
 ```
 
 前端不会把服务商密钥写入浏览器存储或项目文件。前端只与本地后端通信，由后端协调各 Agent、调用外部服务、缓存小节内容并持久化项目状态。
@@ -64,9 +64,7 @@ flowchart LR
 - npm
 - DeepSeek API Key，用于 AI 生成功能
 - 可选：Tavily API Key，用于 Web Search 大纲增强
-- 如需在设置页面持久化密钥，推荐使用 Windows 10/11；当前安全持久化实现依赖 Windows DPAPI
-
-非 Windows 系统可以通过环境变量提供服务商密钥，但当前版本无法安全持久化在设置页中新输入的密钥。
+- Windows 10/11；Linux 如需从设置页保存密钥，需要配置 `APP_ENCRYPTION_KEY`
 
 ## 快速开始
 
@@ -84,6 +82,19 @@ npm run dev
 
 进入应用的“设置”页面，填写 DeepSeek API Key，获取官方模型列表，测试连接并保存配置。如果需要 Web Search 增强，再填写 Tavily API Key。
 
+### Docker 一键部署
+
+Docker 部署使用 Nginx 提供单一访问入口，并通过数据卷保存学习数据：
+
+```bash
+cp deploy/docker.env.example .env
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+# 将输出写入 .env 的 APP_ENCRYPTION_KEY
+docker compose up -d --build
+```
+
+默认访问 `http://127.0.0.1:8080`。需要局域网或公网部署时，请先阅读完整的 [Docker 部署指南](./docs/docker-deployment.zh-CN.md)。
+
 ### 环境变量
 
 环境变量适用于自动化场景，或无法使用界面安全持久化密钥的系统。
@@ -93,9 +104,12 @@ npm run dev
 | `DEEPSEEK_API_KEY` | DeepSeek API 密钥 | — |
 | `DEEPSEEK_BASE_URL` | OpenAI 兼容的 DeepSeek 接口地址 | `https://api.deepseek.com` |
 | `TAVILY_API_KEY` | Tavily Web Search 密钥 | — |
+| `APP_ENCRYPTION_KEY` | Linux 持久化密钥所需的 32 字节 Base64/十六进制密钥 | — |
 | `PORT` | 本地后端端口 | `8787` |
+| `HOST` | 后端监听地址 | `127.0.0.1` |
+| `CORS_ORIGINS` | 前后端分离时允许的浏览器来源，逗号分隔 | 本地 Vite 地址 |
 | `APP_STORE_PATH` | 本地 JSON 数据文件自定义路径 | `server/data/store.json` |
-| `VITE_API_BASE_URL` | 前端请求的 API 地址 | `http://127.0.0.1:8787/api` |
+| `VITE_API_BASE_URL` | 前端请求的 API 地址 | `/api` |
 
 PowerShell 示例：
 
@@ -142,7 +156,8 @@ learning-studio/
 ## 数据与安全
 
 - 项目和非敏感配置默认保存在 `server/data/store.json`。
-- 在 Windows 设置页面保存的 DeepSeek 与 Tavily 密钥会使用当前 Windows 用户的 DPAPI 加密。
+- Windows 使用当前用户的 DPAPI 加密从设置页保存的 DeepSeek 与 Tavily 密钥。
+- Linux 使用 AES-256-GCM，并要求部署者提供稳定的 `APP_ENCRYPTION_KEY`。
 - 原始 API Key 不会进入浏览器持久化存储，也不会写入项目文件。
 - `server/data/`、`.env*`、构建产物和浏览器测试产物均不会提交到 Git。
 - 本地后端默认只监听回环地址。

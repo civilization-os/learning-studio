@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   askRemoteTutor,
   completeRemoteSection,
@@ -6,6 +6,7 @@ import {
   generateRemoteLesson,
   generateRemoteOutline,
   generateRemoteProjectDescription,
+  getRemotePreferenceRecommendations,
   getRemoteAiSettings,
   getRemoteModels,
   getRemoteSearchSettings,
@@ -25,8 +26,11 @@ import {
   LessonSection,
   LearningProject,
   ModelSettings,
+  OutlinePreferences,
+  PreferenceRecommendations,
   StudyState,
 } from "./studyAgent";
+import { preferenceQuestions } from "./preferenceConfig";
 import { loadStudyState, saveStudyState } from "./storage";
 
 type MainView = "home" | "plan" | "review" | "stats";
@@ -68,6 +72,14 @@ function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "发生未知错误";
 }
 
+function getSourceHost(url: string) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "参考资料";
+  }
+}
+
 export default function App() {
   const { notify } = useToast();
   const [state, setState] = useState<StudyState>(() => loadStudyState());
@@ -102,16 +114,35 @@ export default function App() {
     go("detail");
   }
 
-  async function startCreate(topic: string, description: string) {
+  async function startCreate(
+    topic: string,
+    description: string,
+    preferences: OutlinePreferences,
+  ) {
     go("generating");
     let project: LearningProject;
 
     try {
-      project = await createRemoteProject({ topic, description });
+      project = {
+        ...(await createRemoteProject({ topic, description })),
+        outlinePreferences: preferences,
+      };
       try {
-        const generated = await generateRemoteOutline(project.id);
+        const generated = await generateRemoteOutline(
+          project.id,
+          "generate",
+          preferences,
+        );
         project = generated.project;
-        if (generated.data.warning) {
+        if (project.generation?.outlineStatus === "fallback") {
+          notify({
+            variant: "error",
+            title: "课程结构没有生成完成",
+            description:
+              generated.data.warning ??
+              "当前显示的是临时内容，请在大纲页重新规划课程。",
+          });
+        } else if (generated.data.warning) {
           notify({
             variant: "warning",
             title: generated.data.webSearchUsed ? "大纲已生成" : "已使用降级模式",
@@ -126,7 +157,10 @@ export default function App() {
         });
       }
     } catch (error) {
-      project = createProjectFromGoal({ topic, description });
+      project = {
+        ...createProjectFromGoal({ topic, description }),
+        outlinePreferences: preferences,
+      };
       notify({
         variant: "warning",
         title: "已切换到本地模式",
@@ -140,6 +174,47 @@ export default function App() {
 
   function updateDraftChapters(chapters: CourseChapter[]) {
     setDraftProject((project) => (project ? { ...project, chapters } : project));
+  }
+
+  async function regenerateDraftOutline() {
+    if (!draftProject) return;
+
+    try {
+      const generated = await generateRemoteOutline(
+        draftProject.id,
+        "generate",
+        draftProject.outlinePreferences,
+      );
+      setDraftProject(generated.project);
+
+      const isFallback =
+        generated.project.generation?.outlineStatus === "fallback";
+      const chapterCount = generated.project.chapters.length;
+      const sectionCount = generated.project.chapters.reduce(
+        (count, chapter) => count + chapter.sections.length,
+        0,
+      );
+
+      notify({
+        variant: isFallback
+          ? "error"
+          : generated.data.warning
+            ? "warning"
+            : "success",
+        title: isFallback
+          ? "课程结构仍未生成完成"
+          : "课程已重新规划",
+        description:
+          generated.data.warning ??
+          `已整理为 ${chapterCount} 章、${sectionCount} 个小节。`,
+      });
+    } catch (error) {
+      notify({
+        variant: "error",
+        title: "重新规划失败",
+        description: getErrorMessage(error),
+      });
+    }
   }
 
   async function optimizeDraftOutline() {
@@ -159,7 +234,7 @@ export default function App() {
     } catch (error) {
       notify({
         variant: "error",
-        title: "AI 润色新增节点失败",
+        title: "新增内容润色失败",
         description: getErrorMessage(error),
       });
     }
@@ -221,7 +296,7 @@ export default function App() {
     }));
   }
 
-  const showMainNav = ["home", "plan", "review", "stats", "detail", "settings"].includes(view);
+  const showMainNav = ["home", "plan", "review", "stats", "detail"].includes(view);
 
   return (
     <div className="app">
@@ -238,6 +313,7 @@ export default function App() {
           project={draftProject}
           onBack={() => go("create")}
           onNext={finishOutline}
+          onRegenerate={regenerateDraftOutline}
           onOptimize={optimizeDraftOutline}
           onChange={updateDraftChapters}
         />
@@ -263,7 +339,7 @@ export default function App() {
               const searchSettings = await updateRemoteSearchSettings(settings.webSearchApiKey);
               notify({
                 variant: "success",
-                title: "AI 与 Web Search 设置已保存",
+                title: "内容服务与资料搜索设置已保存",
                 description:
                   aiSettings.apiKeyPersisted || searchSettings.apiKeyPersisted
                     ? "已提交的密钥使用 Windows 当前用户加密并持久化保存。"
@@ -582,12 +658,36 @@ function CreateProjectPage({
   onCreate,
 }: {
   onCancel: () => void;
-  onCreate: (topic: string, description: string) => void;
+  onCreate: (
+    topic: string,
+    description: string,
+    preferences: OutlinePreferences,
+  ) => void;
 }) {
   const { notify } = useToast();
   const [topic, setTopic] = useState("");
   const [description, setDescription] = useState("");
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
+  const [preferenceRecommendations, setPreferenceRecommendations] =
+    useState<PreferenceRecommendations>({});
+  const [step, setStep] = useState<"basics" | "preferences">("basics");
+  const [preferenceDraft, setPreferenceDraft] = useState<
+    Record<
+      keyof OutlinePreferences,
+      { selected: string; custom: string }
+    >
+  >({
+    learningGoal: { selected: "__skip__", custom: "" },
+    currentLevel: { selected: "__skip__", custom: "" },
+    coveragePreference: { selected: "__skip__", custom: "" },
+    timeBudget: { selected: "__skip__", custom: "" },
+    sessionLength: { selected: "__skip__", custom: "" },
+  });
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [step]);
 
   async function handleGenerateDescription() {
     if (!topic.trim() || isGeneratingDescription) return;
@@ -603,12 +703,119 @@ function CreateProjectPage({
     } catch (error) {
       notify({
         variant: "error",
-        title: "Agent 生成描述失败",
+        title: "描述生成失败",
         description: getErrorMessage(error),
       });
     } finally {
       setIsGeneratingDescription(false);
     }
+  }
+
+  function updatePreference(
+    key: keyof OutlinePreferences,
+    update: Partial<{ selected: string; custom: string }>,
+  ) {
+    setPreferenceDraft((current) => ({
+      ...current,
+      [key]: { ...current[key], ...update },
+    }));
+  }
+
+  function resolvePreferences(): OutlinePreferences {
+    return Object.fromEntries(
+      Object.entries(preferenceDraft).flatMap(([key, value]) => {
+        if (value.selected === "__skip__") return [];
+        const resolved =
+          value.selected === "__custom__"
+            ? value.custom.trim()
+            : value.selected;
+        return resolved ? [[key, resolved]] : [];
+      }),
+    ) as OutlinePreferences;
+  }
+
+  async function handleContinueToPreferences() {
+    if (!topic.trim() || isGeneratingDescription) return;
+    setStep("preferences");
+    setPreferenceRecommendations({});
+    setIsLoadingRecommendations(true);
+    try {
+      setPreferenceRecommendations(
+        await getRemotePreferenceRecommendations(topic, description),
+      );
+    } catch {
+      setPreferenceRecommendations({});
+    } finally {
+      setIsLoadingRecommendations(false);
+    }
+  }
+
+  if (step === "preferences") {
+    return (
+      <main className="center-page center-page--wide">
+        <section className="form-card preference-card">
+          <div className="form-head">
+            <button
+              className="icon-button"
+              onClick={() => setStep("basics")}
+              aria-label="返回填写课题"
+            >
+              ←
+            </button>
+            <div className="form-head-copy">
+              <span>第 2 步，共 2 步</span>
+              <h1>让课程更贴合你</h1>
+              <p>时间与内容范围分开设置；拿不准的部分可以交给课程规划。</p>
+            </div>
+            <span />
+          </div>
+
+          <div
+            className={`preference-guidance${isLoadingRecommendations ? " is-loading" : ""}`}
+            role="status"
+          >
+            <i aria-hidden="true">{isLoadingRecommendations ? "…" : "✓"}</i>
+            <span>
+              <strong>
+                {isLoadingRecommendations
+                  ? "正在结合课题整理建议"
+                  : Object.keys(preferenceRecommendations).length
+                    ? "已标出可参考的选项"
+                    : "没有依据的内容不会替你猜"}
+              </strong>
+              <small>建议不会自动选中，你仍然可以忽略或自己填写。</small>
+            </span>
+          </div>
+
+          <div className="preference-list">
+            {preferenceQuestions.map((question) => (
+              <PreferenceQuestion
+                key={question.key}
+                title={question.title}
+                description={question.description}
+                value={preferenceDraft[question.key]}
+                options={question.options}
+                skipLabel={question.skipLabel}
+                customPlaceholder={question.customPlaceholder}
+                recommendedOption={preferenceRecommendations[question.key]}
+                wide={question.wide}
+                onChange={(update) => updatePreference(question.key, update)}
+              />
+            ))}
+          </div>
+
+          <button
+            className="primary-pill"
+            onClick={() => onCreate(topic, description, resolvePreferences())}
+          >
+            开始规划课程 →
+          </button>
+          <button className="text-button" onClick={() => setStep("basics")}>
+            返回修改课题
+          </button>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -639,35 +846,109 @@ function CreateProjectPage({
             >
               <i aria-hidden="true">✦</i>
               {isGeneratingDescription
-                ? "Agent 生成中…"
+                ? "正在生成…"
                 : description.trim()
-                  ? "Agent 重新生成"
-                  : "Agent 生成"}
+                  ? "重新生成"
+                  : "帮我生成"}
             </button>
           </div>
           <textarea
             id="project-description"
             value={description}
             aria-busy={isGeneratingDescription}
+            readOnly={isGeneratingDescription}
             onChange={(event) => setDescription(event.target.value)}
             placeholder={
               topic.trim()
-                ? "可以手动填写，或让 Agent 根据课题名称生成…"
+                ? "可以手动填写，也可以根据课题名称自动补充…"
                 : "例如：每天背诵 3 首，整理意象并记录感悟..."
             }
             rows={5}
           />
           <small className="field-help">
-            Agent 只填写描述，不会直接创建项目；生成后仍可手动修改。
+            这里只补充学习范围和内容组织；你的基础、目标和时间安排在下一步选择。
           </small>
         </div>
         <div className="create-orb">✓</div>
-        <button className="primary-pill" disabled={!topic.trim()} onClick={() => onCreate(topic, description)}>
-          创建项目 →
+        <button
+          className="primary-pill"
+          disabled={!topic.trim() || isGeneratingDescription}
+          onClick={handleContinueToPreferences}
+        >
+          下一步：设置学习方式 →
         </button>
         <button className="text-button" onClick={onCancel}>取消并返回主界面</button>
       </section>
     </main>
+  );
+}
+
+function PreferenceQuestion({
+  title,
+  description,
+  value,
+  options,
+  skipLabel,
+  customPlaceholder,
+  recommendedOption,
+  wide = false,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  value: { selected: string; custom: string };
+  options: readonly string[];
+  skipLabel: string;
+  customPlaceholder: string;
+  recommendedOption?: string;
+  wide?: boolean;
+  onChange: (update: Partial<{ selected: string; custom: string }>) => void;
+}) {
+  return (
+    <fieldset
+      className={`preference-question${wide ? " preference-question--wide" : ""}`}
+    >
+      <legend>{title}</legend>
+      <p>{description}</p>
+      <div className="preference-options">
+        {options.map((option) => (
+          <button
+            className={value.selected === option ? "is-selected" : ""}
+            key={option}
+            type="button"
+            onClick={() => onChange({ selected: option })}
+          >
+            <span>{option}</span>
+            {recommendedOption === option ? (
+              <small className="preference-recommendation">建议</small>
+            ) : null}
+          </button>
+        ))}
+        <button
+          className={value.selected === "__skip__" ? "is-selected is-skip" : "is-skip"}
+          type="button"
+          onClick={() => onChange({ selected: "__skip__" })}
+        >
+          {skipLabel}
+        </button>
+        <button
+          className={value.selected === "__custom__" ? "is-selected" : ""}
+          type="button"
+          onClick={() => onChange({ selected: "__custom__" })}
+        >
+          自己填写
+        </button>
+      </div>
+      {value.selected === "__custom__" ? (
+        <input
+          autoFocus
+          maxLength={240}
+          value={value.custom}
+          onChange={(event) => onChange({ custom: event.target.value })}
+          placeholder={customPlaceholder}
+        />
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -677,11 +958,12 @@ function GeneratingPage() {
       <section className="generating-card">
         <div className="orbit-loader"><span /><span /><span /></div>
         <h1>正在生成学习大纲</h1>
-        <p>正在联网检索相关资料、核对来源，并生成可调整的项目目录。</p>
+        <p>正在判断课程范围、查找可靠资料，并把内容拆成合适大小的课堂。</p>
         <div className="stage-list">
-          <span>理解课题</span>
-          <span>联网检索</span>
-          <span>生成大纲</span>
+          <span>理解目标</span>
+          <span>规划检索</span>
+          <span>编排课程</span>
+          <span>检查缺口</span>
         </div>
       </section>
     </main>
@@ -692,16 +974,19 @@ function OutlinePage({
   project,
   onBack,
   onNext,
+  onRegenerate,
   onOptimize,
   onChange,
 }: {
   project: LearningProject;
   onBack: () => void;
   onNext: () => Promise<void>;
+  onRegenerate: () => Promise<void>;
   onOptimize: () => Promise<void>;
   onChange: (chapters: CourseChapter[]) => void;
 }) {
   const [isSaving, setIsSaving] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const manualNodeCount = project.chapters.reduce(
     (count, chapter) =>
@@ -710,6 +995,21 @@ function OutlinePage({
       chapter.sections.filter(isUserAddedOutlineNode).length,
     0,
   );
+  const isLegacyFallbackOutline =
+    Boolean(project.generation?.warning) &&
+    !project.outlineAudit &&
+    project.chapters.length === 1 &&
+    project.chapters[0].sections.length <= 2 &&
+    /大纲生成未完成|等待重新规划|基础认知|核心概念|基本方法/.test(
+      [
+        project.chapters[0].title,
+        ...project.chapters[0].sections.map((section) => section.title),
+      ].join(" "),
+    );
+  const isFallbackOutline =
+    project.generation?.outlineStatus === "fallback" ||
+    isLegacyFallbackOutline;
+  const canContinue = !isFallbackOutline || manualNodeCount > 0;
 
   function updateChapter(chapterId: string, title: string) {
     onChange(project.chapters.map((chapter) => (chapter.id === chapterId ? { ...chapter, title } : chapter)));
@@ -805,6 +1105,16 @@ function OutlinePage({
     }
   }
 
+  async function handleRegenerate() {
+    if (isRegenerating) return;
+    setIsRegenerating(true);
+    try {
+      await onRegenerate();
+    } finally {
+      setIsRegenerating(false);
+    }
+  }
+
   return (
     <main className="page narrow">
       <div className="toolbar-card">
@@ -823,7 +1133,7 @@ function OutlinePage({
           {isOptimizing
             ? "正在润色新增节点…"
             : manualNodeCount
-              ? `AI 润色新增节点 (${manualNodeCount})`
+              ? `润色新增节点 (${manualNodeCount})`
               : "暂无新增节点可润色"}
         </button>
       </div>
@@ -842,6 +1152,91 @@ function OutlinePage({
             <span>预计学习</span>
             <strong>{project.outlineSummary.estimatedHours} 小时</strong>
           </div>
+          {project.outlinePlan ? (
+            <div>
+              <span>单次学习</span>
+              <strong>约 {project.outlinePlan.sessionMinutes} 分钟</strong>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {project.outlinePlan ? (
+        <section className="outline-rationale-card">
+          <div className="outline-rationale-main">
+            <span>规划依据</span>
+            <h2>{project.outlinePlan.courseType}</h2>
+            <p>{project.outlinePlan.targetOutcome}</p>
+            <div>
+              <small>{project.outlinePlan.priorKnowledge}</small>
+              <small>
+                {project.outlinePlan.depth === "intro"
+                  ? "入门深度"
+                  : project.outlinePlan.depth === "deep"
+                    ? "深入学习"
+                    : "标准深度"}
+              </small>
+            </div>
+          </div>
+          <div className="outline-rationale-check">
+            <span>
+              {isFallbackOutline
+                ? "结构生成未完成"
+                : project.outlineAudit?.status === "adjusted"
+                  ? "检查后已调整"
+                  : project.outlineAudit
+                    ? "结构检查通过"
+                    : "等待结构检查"}
+            </span>
+            <strong>
+              {isFallbackOutline
+                ? "当前一章只是临时内容，不代表完整课程范围。"
+                : project.outlineAudit?.coverage ??
+                  "已按课程目标确定范围，仍可在下方手动调整。"}
+            </strong>
+            {project.outlineAudit?.changes.length ? (
+              <details>
+                <summary>查看本轮调整</summary>
+                <ul>
+                  {project.outlineAudit.changes.map((change, index) => (
+                    <li key={`${change}-${index}`}>{change}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : project.outlinePlan.assumptions.length ? (
+              <details>
+                <summary>查看采用的默认判断</summary>
+                <ul>
+                  {project.outlinePlan.assumptions.map((assumption, index) => (
+                    <li key={`${assumption}-${index}`}>{assumption}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {isFallbackOutline ? (
+        <section className="outline-fallback-alert" role="alert">
+          <span aria-hidden="true">!</span>
+          <div>
+            <strong>这份课程结构没有生成完整</strong>
+            <p>
+              {project.generation?.warning ??
+                "返回内容未通过结构检查，系统暂时保留了一章临时内容。"}
+            </p>
+            <small>
+              重新规划会保留你的课题、目标和学习偏好，并重新整理完整章节。
+            </small>
+          </div>
+          <button
+            className="primary-pill"
+            disabled={isRegenerating}
+            onClick={handleRegenerate}
+          >
+            {isRegenerating ? "正在重新规划…" : "重新规划课程"}
+          </button>
         </section>
       ) : null}
 
@@ -893,6 +1288,12 @@ function OutlinePage({
                     {section.kind || section.outcome ? (
                       <small>
                         {section.kind ? sectionKindLabels[section.kind] : "学习"}
+                        {section.estimatedMinutes
+                          ? ` · 课堂约 ${section.estimatedMinutes} 分钟`
+                          : ""}
+                        {section.practiceMinutes
+                          ? ` · 练习约 ${section.practiceMinutes} 分钟`
+                          : ""}
                         {section.outcome ? ` · ${section.outcome}` : ""}
                       </small>
                     ) : null}
@@ -934,8 +1335,21 @@ function OutlinePage({
       ) : null}
 
       <div className="bottom-action">
-        <button className="primary-pill" disabled={isSaving} onClick={handleNext}>
-          {isSaving ? "正在保存…" : "下一步 →"}
+        <button
+          className="primary-pill"
+          disabled={isSaving || !canContinue}
+          title={
+            !canContinue
+              ? "请先重新规划课程，或手动补充章节后再继续"
+              : undefined
+          }
+          onClick={handleNext}
+        >
+          {isSaving
+            ? "正在保存…"
+            : canContinue
+              ? "下一步 →"
+              : "请先重新规划课程"}
         </button>
       </div>
     </main>
@@ -1021,6 +1435,21 @@ function ClassroomPage({
   onProjectUpdate: (project: LearningProject) => void;
 }) {
   const { notify } = useToast();
+  type LearningPhase = "orient" | "understand" | "practice" | "reflect";
+  type PracticeResult = "idle" | "correct" | "incorrect";
+  type Confidence = "uncertain" | "partial" | "ready";
+
+  const phaseItems: Array<{
+    id: LearningPhase;
+    index: string;
+    label: string;
+    description: string;
+  }> = [
+    { id: "orient", index: "01", label: "定位", description: "先看知识关系" },
+    { id: "understand", index: "02", label: "理解", description: "弄懂核心机制" },
+    { id: "practice", index: "03", label: "应用", description: "用一次才算数" },
+    { id: "reflect", index: "04", label: "回顾", description: "看看学会了什么" },
+  ];
   const [content, setContent] = useState<LessonContent | null>(
     section.content ?? null,
   );
@@ -1029,6 +1458,12 @@ function ClassroomPage({
   const [isCompleting, setIsCompleting] = useState(false);
   const [tutorInput, setTutorInput] = useState("");
   const [isTutorThinking, setIsTutorThinking] = useState(false);
+  const [activePhase, setActivePhase] = useState<LearningPhase>("orient");
+  const [visitedPhases, setVisitedPhases] = useState<LearningPhase[]>(["orient"]);
+  const [practiceResult, setPracticeResult] = useState<PracticeResult>("idle");
+  const [confidence, setConfidence] = useState<Confidence | null>(null);
+  const [agentSuggestions, setAgentSuggestions] = useState<string[]>([]);
+  const [coachRecommendation, setCoachRecommendation] = useState("");
   const [tutorMessages, setTutorMessages] = useState<
     Array<{
       id: string;
@@ -1060,17 +1495,84 @@ function ClassroomPage({
     currentSectionIndex < sectionPositions.length - 1
       ? sectionPositions[currentSectionIndex + 1]
       : null;
+  const lessonSourceRefs = new Set(
+    content?.research?.sourceRefs ?? section.sourceRefs ?? [],
+  );
+  const lessonSources = (project.sources ?? []).filter((source) =>
+    lessonSourceRefs.has(source.url),
+  );
+  const activePhaseIndex = phaseItems.findIndex((item) => item.id === activePhase);
+  const masteryScore = Math.min(
+    100,
+    (content ? 15 : 0) +
+      (visitedPhases.includes("understand") ? 20 : 0) +
+      (practiceResult !== "idle" ? 15 : 0) +
+      (practiceResult === "correct" ? 30 : 0) +
+      (confidence ? 10 : 0),
+  );
+  const quickPrompts = agentSuggestions.length
+    ? agentSuggestions
+    : activePhase === "orient"
+      ? ["这张知识图怎么读", "本节最重要的关系是什么", "先修知识有哪些"]
+      : activePhase === "understand"
+        ? ["再讲简单点", "换一个生活类比", "检查我的理解"]
+        : activePhase === "practice"
+          ? practiceResult === "idle"
+            ? ["给我一级提示", "帮我排除一个选项", "提醒我用哪个概念"]
+            : ["分析我的思路", "给我一道变式题", "让我解释为什么"]
+          : ["用三个问题检验我", "总结我的薄弱点", "安排一次复习"];
+  const defaultRecommendation =
+    practiceResult === "incorrect"
+      ? "先弄清刚才容易混淆的地方，再试一道类似的题。"
+      : practiceResult === "correct" && !confidence
+        ? "这道题答对了。试着用自己的话说说为什么。"
+        : activePhase === "orient"
+          ? "先花两分钟看看这些知识之间有什么关系。"
+          : activePhase === "understand"
+            ? "看完例子后，先不看讲解，自己试一次。"
+            : activePhase === "practice"
+              ? "先自己作答；实在卡住了，再要一个提示。"
+              : confidence
+                ? "这一节的重点已经基本掌握。之后再用一道新题巩固一下。"
+                : "想一想，如果换个场景，你现在还会不会用。";
+  const coachSignal =
+    practiceResult === "incorrect"
+      ? "这里有一个容易混淆的地方"
+      : practiceResult === "correct"
+        ? "这道题答对了"
+        : activePhase === "practice"
+          ? "正在等待你的独立作答"
+          : `现在进行到「${phaseItems[activePhaseIndex]?.label ?? "学习"}」`;
+
+  function openPhase(phase: LearningPhase) {
+    setActivePhase(phase);
+    setVisitedPhases((current) =>
+      current.includes(phase) ? current : [...current, phase],
+    );
+    setAgentSuggestions([]);
+  }
+
+  function advancePhase() {
+    const nextPhase = phaseItems[activePhaseIndex + 1]?.id;
+    if (nextPhase) openPhase(nextPhase);
+  }
 
   useEffect(() => {
     const requestId = ++lessonRequestId.current;
     setContent(section.content ?? null);
     setGenerationError("");
     setTutorInput("");
+    setActivePhase("orient");
+    setVisitedPhases(["orient"]);
+    setPracticeResult("idle");
+    setConfidence(null);
+    setAgentSuggestions([]);
+    setCoachRecommendation("");
     setTutorMessages([
       {
         id: `intro-${section.id}`,
         role: "assistant",
-        content: `你好，我是这一节的 AI 助教。课程内容生成后，我会结合《${section.title}》的上下文为你解释、举例和出题。`,
+        content: `我会陪你学完《${section.title}》。有不明白的地方随时问我，我们先看看这一节讲什么。`,
       },
     ]);
 
@@ -1117,16 +1619,17 @@ function ClassroomPage({
       onProjectUpdate(result.project);
       notify({
         variant: "success",
-        title: "本节内容已重新生成",
-        description: `已使用 ${result.content.modelName} 更新讲解、示例和练习。`,
+        title: "本节内容已更新",
+        description: "讲解、示例和练习已换成最新整理的版本。",
       });
     } catch (error) {
       if (lessonRequestId.current !== requestId) return;
-      setGenerationError(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      setGenerationError(message);
       notify({
         variant: "error",
-        title: "课程内容生成失败",
-        description: getErrorMessage(error),
+        title: content ? "这次没有更新成功" : "本节内容准备失败",
+        description: content ? `原内容仍然保留。${message}` : message,
       });
     } finally {
       if (lessonRequestId.current === requestId) setIsGenerating(false);
@@ -1159,6 +1662,11 @@ function ClassroomPage({
         section.id,
         message,
         history,
+        {
+          phase: activePhase,
+          attempt: practiceResult,
+          confidence,
+        },
       );
       setTutorMessages((current) => [
         ...current,
@@ -1168,6 +1676,8 @@ function ClassroomPage({
           content: result.answer,
         },
       ]);
+      setAgentSuggestions(result.suggestions);
+      setCoachRecommendation(result.recommendedAction ?? "");
     } catch (error) {
       setTutorMessages((current) => [
         ...current,
@@ -1217,140 +1727,391 @@ function ClassroomPage({
           <i className={isGenerating ? "is-working" : ""} />
           <span>
             {isGenerating
-              ? "内容 Agent 正在生成"
-              : content
-                ? `由 ${content.modelName} 生成`
-                : "等待生成"}
+              ? "正在检查资料并整理本节内容"
+              : lessonSources.length
+                ? `参考 ${lessonSources.length} 项资料`
+                : content && !content.research
+                  ? "参考资料待补充"
+                : content
+                  ? "本节内容已准备"
+                : "内容待准备"}
           </span>
+        </div>
+        <div className="classroom-progress">
+          <span>本节学习情况</span>
+          <strong>{masteryScore}%</strong>
         </div>
       </section>
 
       <div className="classroom-layout">
-        <aside className="course-drawer">
-          <h2>课程目录</h2>
+        <aside className="course-drawer course-drawer--v2">
+          <div className="drawer-heading">
+            <h2>课程地图</h2>
+            <p>查看位置，也可以随时切换小节。</p>
+          </div>
           <CourseTree project={project} onOpenSection={onOpenSection} />
         </aside>
 
         <section className="lesson-content">
-          <div className="lesson-content-toolbar">
+          <section className="lesson-mission">
             <div>
-              <span>AI 课程内容</span>
-              <strong>{section.title}</strong>
+              <span className="mission-kicker">这一节要学什么</span>
+              <h1>{section.title}</h1>
+              <p>{section.outcome ?? content?.overview ?? "理解本节核心机制，并能在一个真实问题中正确应用。"}</p>
+              {lessonSources.length ? (
+                <details className="lesson-sources">
+                  <summary>参考资料 {lessonSources.length} 项</summary>
+                  <div>
+                    {lessonSources.map((source) => (
+                      <a
+                        href={source.url}
+                        key={source.url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <strong>{source.title}</strong>
+                        <span>{getSourceHost(source.url)}</span>
+                      </a>
+                    ))}
+                  </div>
+                </details>
+              ) : content?.research?.warning ? (
+                <span className="lesson-source-note">
+                  本节暂时没有找到合适的外部资料，涉及版本和配置的内容请留意。
+                </span>
+              ) : content && !content.research ? (
+                <span className="lesson-source-note">
+                  这节内容还没有关联参考资料，可以检查并更新。
+                </span>
+              ) : null}
             </div>
             <button
               className="soft-pill"
               disabled={isGenerating}
               onClick={regenerateLesson}
             >
-              {isGenerating ? "正在生成…" : content ? "重新生成" : "开始生成"}
+              {isGenerating ? "正在准备…" : content ? "检查并更新内容" : "准备本节内容"}
             </button>
-          </div>
+          </section>
 
-          {isGenerating ? (
+          <nav className="learning-route" aria-label="本节学习步骤">
+            {phaseItems.map((phase, index) => {
+              const isActive = phase.id === activePhase;
+              const isVisited = visitedPhases.includes(phase.id);
+              return (
+                <button
+                  className={[
+                    "learning-route-step",
+                    isActive ? "is-active" : "",
+                    isVisited ? "is-visited" : "",
+                  ].join(" ")}
+                  key={phase.id}
+                  onClick={() => openPhase(phase.id)}
+                >
+                  <span>{isVisited && !isActive ? "✓" : phase.index}</span>
+                  <span>
+                    <strong>{phase.label}</strong>
+                    <small>{phase.description}</small>
+                  </span>
+                  {index < phaseItems.length - 1 ? <i /> : null}
+                </button>
+              );
+            })}
+          </nav>
+
+          {isGenerating && !content ? (
             <section className="lesson-generation-state" aria-live="polite">
               <div className="generation-orbit">
                 <span />
                 <i />
               </div>
               <div>
-                <p>课程内容 Agent</p>
-                <h2>正在把大纲展开成完整的一节课</h2>
-                <span>组织知识关系 · 编写讲解 · 设计示例 · 生成练习</span>
+                <p>正在准备</p>
+                <h2>正在整理这一节的内容</h2>
+                <span>检查参考资料 · 梳理知识关系 · 准备讲解 · 安排练习</span>
               </div>
             </section>
           ) : null}
 
-          {!isGenerating && generationError ? (
+          {!isGenerating && generationError && !content ? (
             <section className="lesson-error-state" role="alert">
               <span>!</span>
               <div>
-                <strong>本节内容还没有生成</strong>
+                <strong>本节内容还没有准备好</strong>
                 <p>{generationError}</p>
               </div>
               <button className="primary-pill" onClick={regenerateLesson}>
-                重试生成
+                再试一次
               </button>
             </section>
           ) : null}
 
-          {!isGenerating && content ? (
+          {!isGenerating && generationError && content ? (
+            <section className="lesson-update-warning" role="status">
+              <span>!</span>
+              <div>
+                <strong>这次没有更新成功，仍在使用原内容</strong>
+                <p>{generationError}</p>
+              </div>
+              <button className="soft-pill" onClick={regenerateLesson}>
+                再试一次
+              </button>
+            </section>
+          ) : null}
+
+          {content ? (
             <>
-              <Card title="本节思维导图">
-                <p className="lesson-overview">{content.overview}</p>
-                <div className="mind-map mind-map--generated">
-                  <strong>{content.mindMap.center}</strong>
-                  <div className="mind-map-branches">
-                    {content.mindMap.branches.map((branch, branchIndex) => (
-                      <article key={`${branch.title}-${branchIndex}`}>
-                        <span>{branch.title}</span>
-                        <ul>
-                          {branch.details.map((detail, detailIndex) => (
-                            <li key={`${detail}-${detailIndex}`}>{detail}</li>
-                          ))}
-                        </ul>
-                      </article>
+              {activePhase === "orient" ? (
+                <section className="learning-stage learning-stage--orient">
+                  <div className="stage-intro">
+                    <span>01 · 先有个大概</span>
+                    <h2>先看懂知识之间的关系</h2>
+                    <p>{content.overview}</p>
+                  </div>
+                  <div className="mind-map mind-map--generated">
+                    <strong>{content.mindMap.center}</strong>
+                    <div className="mind-map-branches">
+                      {content.mindMap.branches.map((branch, branchIndex) => (
+                        <article key={`${branch.title}-${branchIndex}`}>
+                          <span>{branch.title}</span>
+                          <ul>
+                            {branch.details.map((detail, detailIndex) => (
+                              <li key={`${detail}-${detailIndex}`}>{detail}</li>
+                            ))}
+                          </ul>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                  <button className="stage-primary-action" onClick={advancePhase}>
+                    我知道这节课在解决什么了 <span>→</span>
+                  </button>
+                </section>
+              ) : null}
+
+              {activePhase === "understand" ? (
+                <section className="learning-stage">
+                  <div className="stage-intro">
+                    <span>02 · 弄明白</span>
+                    <h2>抓住“为什么”，而不只是记住结论</h2>
+                    <p>{content.explanation.lead}</p>
+                  </div>
+                  <div className="explanation-copy explanation-copy--focus">
+                    {content.explanation.paragraphs.map((paragraph, index) => (
+                      <p key={index}>{paragraph}</p>
                     ))}
                   </div>
-                </div>
-              </Card>
-
-              <Card title="本节核心讲解">
-                <p className="explanation-lead">{content.explanation.lead}</p>
-                <div className="explanation-copy">
-                  {content.explanation.paragraphs.map((paragraph, index) => (
-                    <p key={index}>{paragraph}</p>
-                  ))}
-                </div>
-                <div className="key-point-grid">
-                  {content.explanation.keyPoints.map((point, index) => (
-                    <div key={index}>
-                      <span>{String(index + 1).padStart(2, "0")}</span>
-                      <p>{point}</p>
+                  <div className="key-point-grid">
+                    {content.explanation.keyPoints.map((point, index) => (
+                      <div key={index}>
+                        <span>{String(index + 1).padStart(2, "0")}</span>
+                        <p>{point}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="worked-example">
+                    <div className="example-heading">
+                      <span>用一个完整案例验证理解</span>
+                      <h3>{content.example.title}</h3>
+                      <p>{content.example.scenario}</p>
                     </div>
-                  ))}
-                </div>
-              </Card>
+                    <ol className="example-steps">
+                      {content.example.steps.map((step, index) => (
+                        <li key={index}>
+                          <span>{index + 1}</span>
+                          <p>{step}</p>
+                        </li>
+                      ))}
+                    </ol>
+                    {content.example.code ? (
+                      <pre className="lesson-code">
+                        <code>{content.example.code}</code>
+                      </pre>
+                    ) : null}
+                    <div className="example-result">
+                      <span>验证结果</span>
+                      <p>{content.example.result}</p>
+                    </div>
+                  </div>
+                  <button className="stage-primary-action" onClick={advancePhase}>
+                    先不看讲解，自己试试 <span>→</span>
+                  </button>
+                </section>
+              ) : null}
 
-              <Card title="本节示例">
-                <div className="example-heading">
-                  <span>完整示例</span>
-                  <h3>{content.example.title}</h3>
-                  <p>{content.example.scenario}</p>
-                </div>
-                <ol className="example-steps">
-                  {content.example.steps.map((step, index) => (
-                    <li key={index}>
-                      <span>{index + 1}</span>
-                      <p>{step}</p>
-                    </li>
-                  ))}
-                </ol>
-                {content.example.code ? (
-                  <pre className="lesson-code">
-                    <code>{content.example.code}</code>
-                  </pre>
-                ) : null}
-                <div className="example-result">
-                  <span>验证结果</span>
-                  <p>{content.example.result}</p>
-                </div>
-              </Card>
+              {activePhase === "practice" ? (
+                <section className="learning-stage">
+                  <div className="stage-intro">
+                    <span>03 · 动手试试</span>
+                    <h2>现在不看答案，独立做一次</h2>
+                    <p>这道题可以帮你看看是否真的理解了。卡住时可以要一个提示，但不会直接显示答案。</p>
+                  </div>
+                  <PracticeCard
+                    exercise={content.exercise}
+                    sectionId={section.id}
+                    onAskForHint={() =>
+                      sendTutorMessage("先不要告诉我答案，请只给我一级提示。")
+                    }
+                    onResult={({ correct }) => {
+                      setPracticeResult(correct ? "correct" : "incorrect");
+                      setCoachRecommendation("");
+                      setAgentSuggestions([]);
+                    }}
+                    onRetry={() => setPracticeResult("idle")}
+                  />
+                  {practiceResult !== "idle" ? (
+                    <button className="stage-primary-action" onClick={advancePhase}>
+                      看看学得怎么样 <span>→</span>
+                    </button>
+                  ) : null}
+                </section>
+              ) : null}
 
-              <PracticeCard
-                exercise={content.exercise}
-                sectionId={section.id}
-              />
+              {activePhase === "reflect" ? (
+                <section className="learning-stage learning-stage--reflect">
+                  <div className="stage-intro">
+                    <span>04 · 回顾一下</span>
+                    <h2>看看这一节，你已经会了什么</h2>
+                    <p>除了自己的感觉，也看看刚才实际做得怎么样。</p>
+                  </div>
+                  <div className="evidence-board">
+                    <article className={visitedPhases.includes("understand") ? "is-earned" : ""}>
+                      <span>01</span>
+                      <div>
+                        <strong>知识关系</strong>
+                        <p>{visitedPhases.includes("understand") ? "已经看过重点之间的联系" : "还没有看完讲解"}</p>
+                      </div>
+                    </article>
+                    <article className={practiceResult !== "idle" ? (practiceResult === "correct" ? "is-earned" : "is-weak") : ""}>
+                      <span>02</span>
+                      <div>
+                        <strong>实际判断</strong>
+                        <p>
+                          {practiceResult === "correct"
+                            ? "刚才独立答对了一道题"
+                            : practiceResult === "incorrect"
+                              ? "有个地方还容易混淆"
+                              : "还没有独立试过"}
+                        </p>
+                      </div>
+                    </article>
+                    <article>
+                      <span>03</span>
+                      <div>
+                        <strong>换个场景</strong>
+                        <p>
+                          {confidence === "ready" && practiceResult === "correct"
+                            ? "可以再试一道不同的题"
+                            : "之后还要用新题试一试"}
+                        </p>
+                      </div>
+                    </article>
+                  </div>
+                  <div className="confidence-check">
+                    <div>
+                      <span>你自己的感觉</span>
+                      <h3>如果换一个场景，你现在能独立完成吗？</h3>
+                    </div>
+                    <div className="confidence-options">
+                      {[
+                        { id: "uncertain" as const, label: "还不行", note: "需要换种方式讲" },
+                        { id: "partial" as const, label: "大致可以", note: "还想再练一次" },
+                        { id: "ready" as const, label: "可以", note: "愿意接受变式验证" },
+                      ].map((option) => (
+                        <button
+                          className={confidence === option.id ? "is-selected" : ""}
+                          key={option.id}
+                          onClick={() => setConfidence(option.id)}
+                        >
+                          <strong>{option.label}</strong>
+                          <small>{option.note}</small>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="completion-decision">
+                    <div>
+                      <span className={practiceResult === "correct" ? "decision-dot is-ready" : "decision-dot"} />
+                      <div>
+                        <strong>
+                          {practiceResult === "correct"
+                            ? "可以结束这一节了"
+                            : "建议先回到练习，弄清刚才的错误"}
+                        </strong>
+                        <p>还不熟的地方会留到之后继续复习。</p>
+                      </div>
+                    </div>
+                    <button
+                      className="primary-pill"
+                      disabled={
+                        isCompleting ||
+                        practiceResult === "idle" ||
+                        section.status === "done"
+                      }
+                      onClick={markSectionComplete}
+                    >
+                      {section.status === "done"
+                        ? "本节已完成"
+                        : isCompleting
+                          ? "保存中…"
+                          : "完成本节"}
+                    </button>
+                  </div>
+                </section>
+              ) : null}
             </>
           ) : null}
         </section>
 
-        <aside className="ai-chat">
+        <aside className="ai-chat ai-coach">
           <div className="ai-chat-heading">
             <div>
               <span className="ai-status-dot" />
-              <p>基于当前小节</p>
+              <p>根据你的学习情况</p>
             </div>
-            <h2>AI 助教</h2>
+            <h2>学习助手</h2>
+          </div>
+          <section className="coach-readout">
+            <div
+              className="mastery-ring"
+              style={{ "--mastery": `${masteryScore}%` } as CSSProperties}
+            >
+              <span>{masteryScore}</span>
+              <small>本节进度</small>
+            </div>
+            <div>
+              <small>现在</small>
+              <strong>{coachSignal}</strong>
+            </div>
+          </section>
+          <div className="coach-evidence">
+            <span className={visitedPhases.includes("understand") ? "is-earned" : ""}>
+              <i /> 知识关系
+            </span>
+            <span className={practiceResult === "correct" ? "is-earned" : practiceResult === "incorrect" ? "is-weak" : ""}>
+              <i /> 会不会做
+            </span>
+            <span>
+              <i /> 能不能变通
+            </span>
+          </div>
+          <section className="coach-next-action">
+            <span>接下来</span>
+            <p>{coachRecommendation || defaultRecommendation}</p>
+          </section>
+          <div className="coach-divider">
+            <span>需要帮助？</span>
+          </div>
+          <div className="prompt-chips">
+            {quickPrompts.map((prompt) => (
+              <button
+                disabled={isTutorThinking}
+                key={prompt}
+                onClick={() => sendTutorMessage(prompt)}
+              >
+                {prompt}
+              </button>
+            ))}
           </div>
           <div className="chat-thread" ref={chatThreadRef} aria-live="polite">
             {tutorMessages.map((message) => (
@@ -1365,26 +2126,13 @@ function ClassroomPage({
             {isTutorThinking ? (
               <div className="chat-message chat-message--assistant">
                 <small>助教</small>
-                <div className="thinking-dots" aria-label="AI 助教正在思考">
+                <div className="thinking-dots" aria-label="正在回复">
                   <i />
                   <i />
                   <i />
                 </div>
               </div>
             ) : null}
-          </div>
-          <div className="prompt-chips">
-            {["再讲简单点", "给我出一道题", "举个例子", "总结本节"].map(
-              (prompt) => (
-                <button
-                  disabled={isTutorThinking}
-                  key={prompt}
-                  onClick={() => sendTutorMessage(prompt)}
-                >
-                  {prompt}
-                </button>
-              ),
-            )}
           </div>
           <div className="chat-input">
             <textarea
@@ -1425,17 +2173,22 @@ function ClassroomPage({
           上一节
         </button>
         <button
-          disabled={isCompleting || section.status === "done"}
-          onClick={markSectionComplete}
+          disabled={activePhaseIndex <= 0}
+          onClick={() => {
+            const previousPhase = phaseItems[activePhaseIndex - 1]?.id;
+            if (previousPhase) openPhase(previousPhase);
+          }}
         >
-          {section.status === "done"
-            ? "已完成"
-            : isCompleting
-              ? "保存中…"
-              : "标记完成"}
+          上一步
         </button>
         <button
-          disabled={!nextSection}
+          disabled={activePhase === "reflect" || isGenerating || !content}
+          onClick={advancePhase}
+        >
+          继续学习
+        </button>
+        <button
+          disabled={!nextSection || section.status !== "done"}
           onClick={() =>
             nextSection &&
             onOpenSection(
@@ -1447,7 +2200,6 @@ function ClassroomPage({
         >
           下一节
         </button>
-        <button onClick={onBack}>回到目录</button>
       </nav>
     </main>
   );
@@ -1639,18 +2391,49 @@ function SettingsPage({
 
   return (
     <main className="page narrow">
-      <section className="settings-hero">
+      <section className="settings-hero settings-hero--refined">
         <button className="icon-button" onClick={onCancel} aria-label="返回">←</button>
-        <div>
+        <div className="settings-hero-copy">
           <p>设置</p>
-          <h1>AI 服务配置</h1>
-          <span>当前服务商：DeepSeek</span>
+          <h1>服务与学习设置</h1>
+          <span>连接内容服务和资料搜索，并调整课堂呈现方式。</span>
+        </div>
+        <div className="settings-hero-actions">
+          <div className="settings-service-status">
+            <span className={apiKeyConfigured ? "is-ready" : ""}>
+              <i />
+              DeepSeek {apiKeyConfigured ? "已配置" : "待配置"}
+            </span>
+            <span className={searchKeyConfigured ? "is-ready" : ""}>
+              <i />
+              资料搜索 {searchKeyConfigured ? "已开启" : "待配置"}
+            </span>
+          </div>
+          <button
+            className="primary-pill"
+            disabled={isSaving || !draft.modelName}
+            onClick={handleSave}
+          >
+            {isSaving ? "正在保存…" : "保存全部设置"}
+          </button>
         </div>
       </section>
 
-      <section className="settings-grid">
-        <Card title="DeepSeek">
-          <label>
+      <section className="settings-grid settings-grid--refined">
+        <section className="panel-card settings-card settings-card--provider">
+          <div className="settings-card-head">
+            <div>
+              <span>内容生成</span>
+              <h2>DeepSeek</h2>
+              <p>用于课程规划、课堂讲解、练习和学习问答。</p>
+            </div>
+            <span className={`settings-status-badge ${apiKeyConfigured ? "is-ready" : ""}`}>
+              {apiKeyConfigured ? "可使用" : "未连接"}
+            </span>
+          </div>
+
+          <div className="settings-fields settings-fields--provider">
+          <label className="settings-field--wide">
             API Key
             <input
               type="password"
@@ -1668,28 +2451,27 @@ function SettingsPage({
             </small>
           </label>
           <label>
-            Base URL
+            服务地址
             <input value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} />
           </label>
-          <label>
-            模型
-            <select
+          <div className="settings-select-field">
+            <span className="settings-field-label">生成模型</span>
+            <DropdownSelect
+              ariaLabel="生成模型"
               value={draft.modelName}
               disabled={isLoadingModels || models.length === 0}
-              onChange={(event) =>
-                setDraft({ ...draft, modelName: event.target.value })
+              placeholder={
+                isLoadingModels
+                  ? "正在获取模型…"
+                  : draft.modelName || "请先获取官方模型"
               }
-            >
-              {isLoadingModels ? <option value="">正在从官网获取模型…</option> : null}
-              {!isLoadingModels && models.length === 0 ? (
-                <option value={draft.modelName}>
-                  {draft.modelName || "请先获取官方模型"}
-                </option>
-              ) : null}
-              {models.map((model) => (
-                <option value={model.id} key={model.id}>{model.id}</option>
-              ))}
-            </select>
+              options={models.map((model) => ({
+                value: model.id,
+                label: model.id,
+                meta: model.ownedBy === "deepseek" ? "DeepSeek" : model.ownedBy,
+              }))}
+              onChange={(modelName) => setDraft({ ...draft, modelName })}
+            />
             <small className={modelLoadError ? "settings-hint settings-hint--error" : "settings-hint"}>
               {modelLoadError
                 ? modelLoadError
@@ -1697,35 +2479,40 @@ function SettingsPage({
                   ? `来自 DeepSeek 官方接口 · ${models.length} 个可用模型`
                   : "模型列表不会写死，由 DeepSeek 官方接口返回。"}
             </small>
-          </label>
-          <div className="button-row">
+          </div>
+          </div>
+          <div className="settings-actions">
             <button
               className="soft-pill"
               disabled={isLoadingModels}
               onClick={handleRefreshModels}
             >
-              {isLoadingModels ? "正在获取…" : "刷新官方模型"}
+              {isLoadingModels ? "正在获取…" : "更新模型列表"}
             </button>
             <button
               className="soft-pill"
               disabled={isTesting || !draft.modelName}
               onClick={handleTestConnection}
             >
-              {isTesting ? "正在测试…" : "测试连接"}
-            </button>
-            <button
-              className="primary-pill"
-              disabled={isSaving || !draft.modelName}
-              onClick={handleSave}
-            >
-              {isSaving ? "正在保存…" : "保存配置"}
+              {isTesting ? "正在检查…" : "检查连接"}
             </button>
           </div>
-        </Card>
+        </section>
 
-        <Card title="Web Search · Tavily">
+        <section className="panel-card settings-card settings-card--search">
+          <div className="settings-card-head">
+            <div>
+              <span>资料搜索</span>
+              <h2>Tavily</h2>
+              <p>在生成大纲和更新课堂内容时查找相关资料。</p>
+            </div>
+            <span className={`settings-status-badge ${searchKeyConfigured ? "is-ready" : ""}`}>
+              {searchKeyConfigured ? "已开启" : "未连接"}
+            </span>
+          </div>
+
           <label>
-            Tavily API Key
+            搜索服务密钥
             <input
               type="password"
               autoComplete="off"
@@ -1747,31 +2534,64 @@ function SettingsPage({
                 : "用于大纲生成前的联网资料检索；保存时会加密持久化。"}
             </small>
           </label>
-          <div className="button-row">
+
+          <div className="settings-search-note">
+            <span>生成大纲时</span>
+            <strong>先判断范围，再按目的搜索多组资料</strong>
+            <p>搜索失败时仍会保留可编辑内容，并明确提示资料状态。</p>
+          </div>
+
+          <div className="settings-actions">
             <button
               className="soft-pill"
               disabled={isTestingSearch}
               onClick={handleTestSearch}
             >
-              {isTestingSearch ? "正在检索…" : "测试 Web Search"}
+              {isTestingSearch ? "正在检查…" : "检查资料搜索"}
             </button>
           </div>
-        </Card>
+        </section>
 
-        <Card title="AI 使用场景">
-          {["创建项目时生成大纲", "大纲预览页润色手动新增节点", "课程中心生成讲解", "课程中心生成思维导图", "课程中心生成示例", "课程中心生成练习题", "AI 助教聊天答疑"].map((item) => (
-            <label className="toggle-row" key={item}>
-              {item}
-              <input type="checkbox" defaultChecked />
-            </label>
-          ))}
-        </Card>
+        <section className="panel-card settings-card settings-card--learning">
+          <div className="settings-card-head">
+            <div>
+              <span>课堂体验</span>
+              <h2>学习偏好</h2>
+              <p>统一控制讲解、练习和问答的默认呈现方式。</p>
+            </div>
+          </div>
 
-        <Card title="AI 行为偏好">
-          <SelectRow label="讲解深度" value={draft.explanationDepth} options={["简单", "标准", "深入"]} onChange={(value) => setDraft({ ...draft, explanationDepth: value as ModelSettings["explanationDepth"] })} />
-          <SelectRow label="题目难度" value={draft.questionDifficulty} options={["基础", "提高", "综合"]} onChange={(value) => setDraft({ ...draft, questionDifficulty: value as ModelSettings["questionDifficulty"] })} />
-          <SelectRow label="回答长度" value={draft.answerLength} options={["简短", "适中", "详细"]} onChange={(value) => setDraft({ ...draft, answerLength: value as ModelSettings["answerLength"] })} />
-        </Card>
+          <div className="settings-learning-layout">
+            <div className="settings-preference-fields">
+              <SelectRow label="讲解深度" value={draft.explanationDepth} options={["简单", "标准", "深入"]} onChange={(value) => setDraft({ ...draft, explanationDepth: value as ModelSettings["explanationDepth"] })} />
+              <SelectRow label="题目难度" value={draft.questionDifficulty} options={["基础", "提高", "综合"]} onChange={(value) => setDraft({ ...draft, questionDifficulty: value as ModelSettings["questionDifficulty"] })} />
+              <SelectRow label="回答长度" value={draft.answerLength} options={["简短", "适中", "详细"]} onChange={(value) => setDraft({ ...draft, answerLength: value as ModelSettings["answerLength"] })} />
+            </div>
+
+            <div className="settings-capabilities">
+              <div>
+                <span>当前使用范围</span>
+                <p>这些能力会根据学习阶段自动参与，不需要逐项开关。</p>
+              </div>
+              <ul>
+                {[
+                  "项目大纲",
+                  "新增内容润色",
+                  "课堂讲解",
+                  "知识关系",
+                  "示例与练习",
+                  "资料更新",
+                  "学习问答",
+                ].map((item) => (
+                  <li key={item}>
+                    <i>✓</i>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
   );
@@ -1852,9 +2672,15 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function PracticeCard({
   exercise,
   sectionId,
+  onAskForHint,
+  onResult,
+  onRetry,
 }: {
   exercise: LessonContent["exercise"];
   sectionId: string;
+  onAskForHint: () => void;
+  onResult: (result: { correct: boolean; selectedIndex: number }) => void;
+  onRetry: () => void;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -1906,16 +2732,29 @@ function PracticeCard({
         <button
           className="primary-pill"
           disabled={selected === null || submitted}
-          onClick={() => setSubmitted(true)}
+          onClick={() => {
+            if (selected === null) return;
+            setSubmitted(true);
+            onResult({
+              correct: selected === exercise.answerIndex,
+              selectedIndex: selected,
+            });
+          }}
         >
           提交答案
         </button>
+        {!submitted ? (
+          <button className="soft-pill" onClick={onAskForHint}>
+            给我一级提示
+          </button>
+        ) : null}
         {submitted ? (
           <button
             className="soft-pill"
             onClick={() => {
               setSelected(null);
               setSubmitted(false);
+              onRetry();
             }}
           >
             再做一次
@@ -1938,13 +2777,181 @@ function SelectRow({
   onChange: (value: string) => void;
 }) {
   return (
-    <label>
-      {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option} value={option}>{option}</option>
-        ))}
-      </select>
-    </label>
+    <div className="settings-select-field">
+      <span className="settings-field-label">{label}</span>
+      <DropdownSelect
+        ariaLabel={label}
+        value={value}
+        options={options.map((option) => ({ value: option, label: option }))}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
+type DropdownOption = {
+  value: string;
+  label: string;
+  meta?: string;
+};
+
+function DropdownSelect({
+  value,
+  options,
+  onChange,
+  ariaLabel,
+  placeholder = "请选择",
+  disabled = false,
+}: {
+  value: string;
+  options: DropdownOption[];
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxId = useId();
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  const selectedOption = selectedIndex >= 0 ? options[selectedIndex] : null;
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleOutsidePointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handleOutsidePointer);
+    return () => document.removeEventListener("pointerdown", handleOutsidePointer);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (disabled) setIsOpen(false);
+  }, [disabled]);
+
+  function openMenu() {
+    if (disabled || options.length === 0) return;
+    setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    setIsOpen(true);
+  }
+
+  function commitOption(index: number) {
+    const option = options[index];
+    if (!option) return;
+    onChange(option.value);
+    setHighlightedIndex(index);
+    setIsOpen(false);
+    triggerRef.current?.focus();
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    if (disabled || options.length === 0) return;
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!isOpen) {
+        openMenu();
+        return;
+      }
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      setHighlightedIndex((current) => {
+        const start = current >= 0 ? current : selectedIndex >= 0 ? selectedIndex : 0;
+        return (start + direction + options.length) % options.length;
+      });
+      return;
+    }
+
+    if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      if (!isOpen) openMenu();
+      setHighlightedIndex(event.key === "Home" ? 0 : options.length - 1);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (!isOpen) {
+        openMenu();
+      } else {
+        commitOption(highlightedIndex >= 0 ? highlightedIndex : selectedIndex);
+      }
+      return;
+    }
+
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      setIsOpen(false);
+    }
+  }
+
+  return (
+    <div
+      className={`custom-select${isOpen ? " is-open" : ""}`}
+      ref={rootRef}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        className="custom-select-trigger"
+        role="combobox"
+        aria-label={ariaLabel}
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
+        aria-haspopup="listbox"
+        aria-activedescendant={
+          isOpen && highlightedIndex >= 0
+            ? `${listboxId}-option-${highlightedIndex}`
+            : undefined
+        }
+        disabled={disabled}
+        onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
+        onKeyDown={handleKeyDown}
+      >
+        <span className={selectedOption ? "" : "is-placeholder"}>
+          {selectedOption?.label ?? placeholder}
+        </span>
+        <i aria-hidden="true" />
+      </button>
+
+      {isOpen ? (
+        <div className="custom-select-menu" id={listboxId} role="listbox">
+          {options.map((option, index) => {
+            const isSelected = option.value === value;
+            const isHighlighted = index === highlightedIndex;
+            return (
+              <button
+                type="button"
+                id={`${listboxId}-option-${index}`}
+                className={[
+                  "custom-select-option",
+                  isSelected ? "is-selected" : "",
+                  isHighlighted ? "is-highlighted" : "",
+                ].join(" ")}
+                role="option"
+                aria-selected={isSelected}
+                tabIndex={-1}
+                key={option.value}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                onClick={() => commitOption(index)}
+              >
+                <span>
+                  <strong>{option.label}</strong>
+                  {option.meta ? <small>{option.meta}</small> : null}
+                </span>
+                <i className="custom-select-check" aria-hidden="true">
+                  {isSelected ? "✓" : ""}
+                </i>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }

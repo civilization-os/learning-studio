@@ -1,0 +1,16 @@
+.git
+.github
+.agents
+.env
+.env.*
+!.env.example
+node_modules
+dist
+output
+server/data
+server/dist
+*.log
+*.tsbuildinfo
+Dockerfile*
+compose*.yaml
+docs

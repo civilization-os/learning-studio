@@ -50,6 +50,9 @@ function asSource(result: TavilyResult): WebSource | null {
 export async function searchWeb(
   settings: WebSearchSettings,
   query: string,
+  options?: {
+    maxResults?: number;
+  },
 ): Promise<WebSearchResult> {
   if (!settings.apiKey) {
     return {
@@ -59,21 +62,33 @@ export async function searchWeb(
     };
   }
 
-  const response = await fetch(tavilyApiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
-    body: JSON.stringify({
-      query,
-      search_depth: "basic",
-      topic: "general",
-      max_results: 6,
-      include_answer: false,
-      include_raw_content: false,
-    }),
-  });
+  const maxResults = Math.max(
+    1,
+    Math.min(10, Math.round(options?.maxResults ?? 6)),
+  );
+
+  let response: Response;
+  try {
+    response = await fetch(tavilyApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${settings.apiKey}`,
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: "basic",
+        topic: "general",
+        max_results: maxResults,
+        include_answer: false,
+        include_raw_content: false,
+      }),
+    });
+  } catch {
+    throw new Error(
+      "无法连接资料搜索服务，请检查网络和 Tavily 服务地址后再试。",
+    );
+  }
 
   if (!response.ok) {
     const message = (await response.text()).slice(0, 400);
@@ -84,7 +99,7 @@ export async function searchWeb(
   const sources = (data.results ?? [])
     .map(asSource)
     .filter((source): source is WebSource => Boolean(source))
-    .slice(0, 6);
+    .slice(0, maxResults);
 
   return {
     sources,
