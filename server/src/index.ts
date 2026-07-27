@@ -16,10 +16,17 @@ import {
   CourseChapter,
   LessonContent,
   LearningProject,
+  OutlineAudit,
+  OutlinePlan,
   OutlinePolishPatch,
+  OutlinePreferences,
   WebSource,
 } from "./types.js";
 import { searchWeb } from "./webSearch.js";
+import {
+  canPersistSecrets,
+  getSecretProtectionStatus,
+} from "./secret-protection.js";
 
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? "127.0.0.1";
@@ -172,6 +179,63 @@ function isValidOutlineSummary(
   );
 }
 
+function parseOutlinePreferences(value: unknown): OutlinePreferences {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== "object") {
+    throw new HttpError(400, "课程设置格式无效");
+  }
+  const input = value as Record<string, unknown>;
+  const preferences: OutlinePreferences = {};
+  const keys: Array<keyof OutlinePreferences> = [
+    "learningGoal",
+    "currentLevel",
+    "coveragePreference",
+    "timeBudget",
+    "sessionLength",
+  ];
+  for (const key of keys) {
+    const item = input[key];
+    if (item === undefined || item === "") continue;
+    if (typeof item !== "string" || item.length > 240) {
+      throw new HttpError(400, "课程设置单项不能超过 240 个字符");
+    }
+    preferences[key] = item.trim();
+  }
+  return preferences;
+}
+
+function isValidOutlinePlan(value: unknown): value is OutlinePlan {
+  if (!value || typeof value !== "object") return false;
+  const plan = value as Partial<OutlinePlan>;
+  return (
+    typeof plan.courseType === "string" &&
+    typeof plan.targetOutcome === "string" &&
+    typeof plan.priorKnowledge === "string" &&
+    (plan.depth === "intro" ||
+      plan.depth === "standard" ||
+      plan.depth === "deep") &&
+    typeof plan.estimatedHours === "number" &&
+    typeof plan.sessionMinutes === "number" &&
+    Array.isArray(plan.assumptions) &&
+    plan.assumptions.every((item) => typeof item === "string") &&
+    Array.isArray(plan.researchQueries) &&
+    plan.researchQueries.every((item) => typeof item === "string")
+  );
+}
+
+function isValidOutlineAudit(value: unknown): value is OutlineAudit {
+  if (!value || typeof value !== "object") return false;
+  const audit = value as Partial<OutlineAudit>;
+  return (
+    (audit.status === "passed" || audit.status === "adjusted") &&
+    typeof audit.coverage === "string" &&
+    typeof audit.granularity === "string" &&
+    typeof audit.sequence === "string" &&
+    Array.isArray(audit.changes) &&
+    audit.changes.every((item) => typeof item === "string")
+  );
+}
+
 function isValidLessonContent(value: unknown): value is LessonContent {
   if (!value || typeof value !== "object") return false;
   const content = value as Partial<LessonContent>;
@@ -202,6 +266,19 @@ function isValidLessonContent(value: unknown): value is LessonContent {
     content.exercise.options.length === 4 &&
     typeof content.exercise.answerIndex === "number" &&
     typeof content.exercise.explanation === "string"
+  );
+}
+
+function isValidWebSource(value: unknown): value is WebSource {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "title" in value &&
+    typeof value.title === "string" &&
+    "url" in value &&
+    typeof value.url === "string" &&
+    "snippet" in value &&
+    typeof value.snippet === "string"
   );
 }
 
@@ -302,6 +379,58 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     }
   }
 
+  if (req.method === "POST" && pathname === "/api/projects/suggest-preferences") {
+    const body = await readJson<{
+      topic?: unknown;
+      description?: unknown;
+    }>(req);
+    if (
+      typeof body.topic !== "string" ||
+      !body.topic.trim() ||
+      body.topic.length > 200
+    ) {
+      throw new HttpError(400, "课题名称需要包含 1–200 个字符");
+    }
+    if (
+      body.description !== undefined &&
+      (typeof body.description !== "string" || body.description.length > 1_000)
+    ) {
+      throw new HttpError(400, "内容描述格式无效");
+    }
+    const store = await readStore();
+    try {
+      const result = await runAgent({
+        agentName: "project-creator",
+        input: {
+          action: "suggest-preferences",
+          topic: body.topic.trim(),
+          description:
+            typeof body.description === "string"
+              ? body.description.trim()
+              : "",
+        },
+        store,
+      });
+      const recommendations = result.data.recommendations;
+      if (
+        !recommendations ||
+        typeof recommendations !== "object" ||
+        Array.isArray(recommendations)
+      ) {
+        throw new Error("项目创建 Agent 未返回有效建议");
+      }
+      return sendJson(res, 200, {
+        recommendations,
+        summary: result.summary,
+      });
+    } catch (error) {
+      throw new HttpError(
+        502,
+        error instanceof Error ? error.message : "学习方式建议生成失败",
+      );
+    }
+  }
+
   if (req.method === "GET" && pathname === "/api/projects") {
     const store = await readStore();
     return sendJson(res, 200, { projects: store.projects });
@@ -341,14 +470,15 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   const generateOutlineProjectId = getProjectId(pathname, "generate-outline");
   if (req.method === "POST" && generateOutlineProjectId) {
-    const body = await readJson<{ mode?: unknown }>(req);
+    const body = await readJson<{ mode?: unknown; preferences?: unknown }>(req);
     const mode = body.mode === "optimize" ? "optimize" : "generate";
+    const preferences = parseOutlinePreferences(body.preferences);
     const store = await readStore();
     const project = store.projects.find((item) => item.id === generateOutlineProjectId);
     if (!project) return sendJson(res, 404, { error: "项目不存在" });
     const result = await runAgent({
       agentName: "outline",
-      input: { mode },
+      input: { mode, preferences },
       projectId: project.id,
       store,
     });
@@ -408,6 +538,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (isValidOutlineSummary(result.data.outlineSummary)) {
       project.outlineSummary = result.data.outlineSummary;
     }
+    project.outlinePreferences = preferences;
+    if (isValidOutlinePlan(result.data.outlinePlan)) {
+      project.outlinePlan = result.data.outlinePlan;
+    } else {
+      delete project.outlinePlan;
+    }
+    if (isValidOutlineAudit(result.data.outlineAudit)) {
+      project.outlineAudit = result.data.outlineAudit;
+    } else {
+      delete project.outlineAudit;
+    }
     project.sources = Array.isArray(result.data.sources)
       ? (result.data.sources as WebSource[])
       : [];
@@ -415,6 +556,12 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       webSearchUsed: result.data.webSearchUsed === true,
       generatedAt: new Date().toISOString(),
       query: typeof result.data.query === "string" ? result.data.query : project.title,
+      outlineStatus:
+        result.data.fallbackUsed === true
+          ? "fallback"
+          : isValidOutlineAudit(result.data.outlineAudit)
+            ? "ready"
+            : "draft",
       ...(typeof result.data.warning === "string"
         ? { warning: result.data.warning }
         : {}),
@@ -441,7 +588,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return sendJson(res, 404, { error: "学习小节不存在" });
     }
 
-    if (section.content && body.force !== true) {
+    if (
+      section.content &&
+      section.content.research &&
+      body.force !== true
+    ) {
       return sendJson(res, 200, {
         project,
         content: section.content,
@@ -462,6 +613,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         input: {
           chapterId: chapter.id,
           sectionId: section.id,
+          refreshSources: body.force === true,
         },
         projectId: project.id,
         store,
@@ -470,6 +622,23 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       if (!isValidLessonContent(content)) {
         throw new Error("课程内容 Agent 返回了无效结构");
       }
+      const incomingSources = Array.isArray(result.data.sources)
+        ? result.data.sources.filter(isValidWebSource)
+        : [];
+      const sourcesByUrl = new Map(
+        (project.sources ?? []).map((source) => [source.url, source]),
+      );
+      for (const source of incomingSources) {
+        sourcesByUrl.set(source.url, source);
+      }
+      project.sources = Array.from(sourcesByUrl.values());
+      const sourceRefs = Array.isArray(result.data.sourceRefs)
+        ? result.data.sourceRefs.filter(
+            (value): value is string =>
+              typeof value === "string" && sourcesByUrl.has(value),
+          )
+        : [];
+      section.sourceRefs = Array.from(new Set(sourceRefs));
       section.content = content;
       await writeStore(store);
       return sendJson(res, 200, {
@@ -477,6 +646,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         content,
         cached: false,
         summary: result.summary,
+        webSearchUsed: result.data.webSearchUsed === true,
+        sourceCount: section.sourceRefs.length,
+        ...(typeof result.data.warning === "string"
+          ? { warning: result.data.warning }
+          : {}),
       });
     } catch (error) {
       throw new HttpError(
@@ -491,6 +665,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const body = await readJson<{
       message?: unknown;
       history?: unknown;
+      learningContext?: unknown;
     }>(req);
     if (
       typeof body.message !== "string" ||
@@ -525,6 +700,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
           sectionId: tutorRoute.sectionId,
           message: body.message,
           history: body.history,
+          learningContext: body.learningContext,
         },
         projectId: project.id,
         store,
@@ -537,6 +713,10 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         suggestions: Array.isArray(result.data.suggestions)
           ? result.data.suggestions
           : [],
+        recommendedAction:
+          typeof result.data.recommendedAction === "string"
+            ? result.data.recommendedAction
+            : undefined,
       });
     } catch (error) {
       throw new HttpError(
@@ -605,7 +785,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         ...safeSettings,
         apiKeyConfigured: Boolean(store.aiSettings.apiKey),
         apiKeyPersisted: isApiKeyPersisted(),
-        keyProtection: "windows-dpapi-current-user",
+        keyProtection: getSecretProtectionStatus(),
       },
     });
   }
@@ -649,6 +829,12 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       if (typeof body.apiKey !== "string" || body.apiKey.length > 512) {
         throw new HttpError(400, "API Key 格式无效");
       }
+      if (body.apiKey.trim() && !canPersistSecrets()) {
+        throw new HttpError(
+          400,
+          "当前系统未配置 APP_ENCRYPTION_KEY；请先配置 32 字节部署密钥，或通过 DEEPSEEK_API_KEY 环境变量提供密钥",
+        );
+      }
       setRuntimeApiKey(body.apiKey);
       store.aiSettings.apiKey = body.apiKey.trim() || undefined;
     }
@@ -661,7 +847,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         ...safeSettings,
         apiKeyConfigured: Boolean(store.aiSettings.apiKey),
         apiKeyPersisted: isApiKeyPersisted(),
-        keyProtection: "windows-dpapi-current-user",
+        keyProtection: getSecretProtectionStatus(),
       },
     });
   }
@@ -673,7 +859,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         provider: store.webSearchSettings.provider,
         apiKeyConfigured: Boolean(store.webSearchSettings.apiKey),
         apiKeyPersisted: isWebSearchApiKeyPersisted(),
-        keyProtection: "windows-dpapi-current-user",
+        keyProtection: getSecretProtectionStatus(),
       },
     });
   }
@@ -686,6 +872,12 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       if (typeof body.apiKey !== "string" || body.apiKey.length > 512) {
         throw new HttpError(400, "Web Search API Key 格式无效");
       }
+      if (body.apiKey.trim() && !canPersistSecrets()) {
+        throw new HttpError(
+          400,
+          "当前系统未配置 APP_ENCRYPTION_KEY；请先配置 32 字节部署密钥，或通过 TAVILY_API_KEY 环境变量提供密钥",
+        );
+      }
       setRuntimeWebSearchApiKey(body.apiKey);
       store.webSearchSettings.apiKey = body.apiKey.trim() || undefined;
     }
@@ -697,7 +889,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         provider: store.webSearchSettings.provider,
         apiKeyConfigured: Boolean(store.webSearchSettings.apiKey),
         apiKeyPersisted: isWebSearchApiKeyPersisted(),
-        keyProtection: "windows-dpapi-current-user",
+        keyProtection: getSecretProtectionStatus(),
       },
     });
   }

@@ -5,12 +5,22 @@ export type LessonSection = {
   origin?: "ai" | "user";
   kind?: "concept" | "practice" | "project" | "review";
   outcome?: string;
+  estimatedMinutes?: number;
+  practiceMinutes?: number;
+  sourceRefs?: string[];
   content?: LessonContent;
 };
 
 export type LessonContent = {
   generatedAt: string;
   modelName: string;
+  research?: {
+    sourceRefs: string[];
+    query: string;
+    searchedAt: string;
+    webSearchUsed: boolean;
+    warning?: string;
+  };
   overview: string;
   mindMap: {
     center: string;
@@ -57,6 +67,33 @@ export type WebSource = {
   score?: number;
 };
 
+export type OutlinePreferences = {
+  learningGoal?: string;
+  currentLevel?: string;
+  coveragePreference?: string;
+  timeBudget?: string;
+  sessionLength?: string;
+};
+
+export type OutlinePlan = {
+  courseType: string;
+  targetOutcome: string;
+  priorKnowledge: string;
+  depth: "intro" | "standard" | "deep";
+  estimatedHours: number;
+  sessionMinutes: number;
+  assumptions: string[];
+  researchQueries: string[];
+};
+
+export type OutlineAudit = {
+  status: "passed" | "adjusted";
+  coverage: string;
+  granularity: string;
+  sequence: string;
+  changes: string[];
+};
+
 export type OutlinePolishPatch = {
   id: string;
   type: "chapter" | "section";
@@ -81,12 +118,16 @@ export type LearningProject = {
     courseGoal: string;
     estimatedHours: number;
   };
+  outlinePreferences?: OutlinePreferences;
+  outlinePlan?: OutlinePlan;
+  outlineAudit?: OutlineAudit;
   sources?: WebSource[];
   generation?: {
     webSearchUsed: boolean;
     generatedAt: string;
     query: string;
     warning?: string;
+    outlineStatus?: "ready" | "draft" | "fallback";
   };
 };
 

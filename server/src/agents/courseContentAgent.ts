@@ -1,5 +1,6 @@
 import { callDeepSeek } from "../deepseek.js";
-import { LessonContent } from "../types.js";
+import { LessonContent, WebSource } from "../types.js";
+import { searchWeb } from "../webSearch.js";
 import { AgentDefinition } from "./types.js";
 
 type GeneratedLessonContent = {
@@ -152,6 +153,36 @@ function parseLessonContent(
   };
 }
 
+function mergeSources(
+  current: WebSource[],
+  incoming: WebSource[],
+  maximum = 8,
+): WebSource[] {
+  const byUrl = new Map<string, WebSource>();
+  for (const source of [...current, ...incoming]) {
+    if (!source.url) continue;
+    const existing = byUrl.get(source.url);
+    if (!existing || (source.score ?? 0) > (existing.score ?? 0)) {
+      byUrl.set(source.url, source);
+    }
+  }
+  return Array.from(byUrl.values())
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
+    .slice(0, maximum);
+}
+
+function formatResearchSources(sources: WebSource[]): string {
+  if (!sources.length) {
+    return "本节暂时没有可用的外部资料。遇到版本、数字或具体事实时必须明确说明资料不足，不要编造。";
+  }
+  return sources
+    .map(
+      (source, index) =>
+        `[${index + 1}] ${source.title}\nURL: ${source.url}\n资料摘要: ${source.snippet}`,
+    )
+    .join("\n\n");
+}
+
 export const courseContentAgent: AgentDefinition = {
   name: "course-content",
   displayName: "课程内容 Agent",
@@ -183,6 +214,41 @@ export const courseContentAgent: AgentDefinition = {
       title: item.title,
       outcome: item.outcome,
     }));
+    const projectSources = project.sources ?? [];
+    const assignedSourceUrls = new Set(section.sourceRefs ?? []);
+    let lessonSources = projectSources.filter((source) =>
+      assignedSourceUrls.has(source.url),
+    );
+    const researchQuery = [
+      project.title,
+      chapter.title,
+      section.title,
+      section.outcome ?? "",
+      "官方文档 当前版本 原理 最佳实践",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const shouldRefreshSources =
+      input.refreshSources === true || lessonSources.length < 2;
+    let webSearchUsed = false;
+    let researchWarning = "";
+
+    if (shouldRefreshSources) {
+      try {
+        const result = await searchWeb(
+          context.store.webSearchSettings,
+          researchQuery,
+        );
+        lessonSources = mergeSources(lessonSources, result.sources);
+        webSearchUsed = result.webSearchUsed;
+        researchWarning = result.warning ?? "";
+      } catch (error) {
+        researchWarning =
+          error instanceof Error ? error.message : "本节资料搜索暂时不可用。";
+      }
+    }
+    const sourceRefs = lessonSources.map((source) => source.url);
+    const searchedAt = new Date().toISOString();
 
     const prompt = `为下面的小节生成一份可以直接用于自学页面的中文课程内容。
 
@@ -195,6 +261,9 @@ export const courseContentAgent: AgentDefinition = {
 小节类型：${section.kind ?? "concept"}
 学习成果：${section.outcome ?? "掌握本节核心知识并能应用"}
 同章小节：${JSON.stringify(neighboringSections)}
+
+本节参考资料：
+${formatResearchSources(lessonSources)}
 
 只输出 JSON 对象，必须严格符合：
 {
@@ -230,7 +299,10 @@ export const courseContentAgent: AgentDefinition = {
 2. explanation 生成 2–6 个段落和 3–6 个关键要点，由浅入深，不假设学习者已经掌握后续章节；
 3. 示例必须与当前课程主题一致，不能套用无关的数学或编程示例；
 4. 练习必须有且只有 4 个选项，answerIndex 从 0 开始；
-5. 内容要准确、可验证，避免空泛口号、Markdown 标题和虚构引用。`;
+5. 优先使用参考资料支持核心事实；资料没有覆盖的内容不得伪装成资料结论；
+6. 涉及版本、配置、API 或时效性事实时，只能使用参考资料中能够确认的内容；
+7. 不在正文中编造引用编号或来源；资料入口由页面统一展示；
+8. 内容要准确、可验证，避免空泛口号、Markdown 标题和虚构引用。`;
 
     const response = await callDeepSeek(
       context.store.aiSettings,
@@ -248,10 +320,20 @@ export const courseContentAgent: AgentDefinition = {
       throw new Error("DeepSeek 尚未完成配置");
     }
 
-    const content = parseLessonContent(
+    const generatedContent = parseLessonContent(
       response.content,
       context.store.aiSettings.modelName,
     );
+    const content: LessonContent = {
+      ...generatedContent,
+      research: {
+        sourceRefs,
+        query: researchQuery,
+        searchedAt,
+        webSearchUsed,
+        ...(researchWarning ? { warning: researchWarning } : {}),
+      },
+    };
     return {
       agent: "course-content",
       summary: `已生成《${section.title}》的完整学习内容。`,
@@ -259,6 +341,11 @@ export const courseContentAgent: AgentDefinition = {
         chapterId,
         sectionId,
         content,
+        sources: lessonSources,
+        sourceRefs,
+        researchQuery,
+        webSearchUsed,
+        ...(researchWarning ? { warning: researchWarning } : {}),
       },
       nextActions: ["开始学习", "向 AI 助教提问", "完成本节练习"],
     };

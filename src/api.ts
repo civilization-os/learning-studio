@@ -3,9 +3,16 @@ import type {
   LearningProject,
   LessonContent,
   ModelSettings,
+  OutlinePreferences,
+  PreferenceRecommendations,
 } from "./studyAgent";
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8787/api").replace(/\/$/, "");
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
+
+type KeyProtection =
+  | "windows-dpapi-current-user"
+  | "aes-256-gcm-environment-key"
+  | "unavailable";
 
 type AiSettingsResponse = {
   settings: {
@@ -14,7 +21,7 @@ type AiSettingsResponse = {
     baseUrl: string;
     apiKeyConfigured: boolean;
     apiKeyPersisted: boolean;
-    keyProtection: "windows-dpapi-current-user";
+    keyProtection: KeyProtection;
   };
 };
 
@@ -23,7 +30,7 @@ type SearchSettingsResponse = {
     provider: "Tavily";
     apiKeyConfigured: boolean;
     apiKeyPersisted: boolean;
-    keyProtection: "windows-dpapi-current-user";
+    keyProtection: KeyProtection;
   };
 };
 
@@ -92,15 +99,32 @@ export async function generateRemoteProjectDescription(
   return result.description;
 }
 
+export async function getRemotePreferenceRecommendations(
+  topic: string,
+  description: string,
+): Promise<PreferenceRecommendations> {
+  const result = await apiRequest<{
+    recommendations: PreferenceRecommendations;
+  }>("/projects/suggest-preferences", {
+    method: "POST",
+    body: JSON.stringify({
+      topic: topic.trim(),
+      description: description.trim(),
+    }),
+  });
+  return result.recommendations;
+}
+
 export async function generateRemoteOutline(
   projectId: string,
   mode: "generate" | "optimize" = "generate",
+  preferences?: OutlinePreferences,
 ): Promise<OutlineGenerationResponse> {
   return apiRequest<OutlineGenerationResponse>(
     `/projects/${encodeURIComponent(projectId)}/generate-outline`,
     {
       method: "POST",
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ mode, preferences }),
     },
   );
 }
@@ -121,6 +145,9 @@ export async function generateRemoteLesson(
   content: LessonContent;
   cached: boolean;
   summary: string;
+  webSearchUsed?: boolean;
+  sourceCount?: number;
+  warning?: string;
 }> {
   return apiRequest(
     `/projects/${encodeURIComponent(projectId)}/sections/${encodeURIComponent(sectionId)}/generate-content`,
@@ -141,12 +168,21 @@ export async function askRemoteTutor(
   sectionId: string,
   message: string,
   history: TutorHistoryItem[],
-): Promise<{ answer: string; suggestions: string[] }> {
+  learningContext?: {
+    phase: "orient" | "understand" | "practice" | "reflect";
+    attempt: "idle" | "correct" | "incorrect";
+    confidence: "uncertain" | "partial" | "ready" | null;
+  },
+): Promise<{
+  answer: string;
+  suggestions: string[];
+  recommendedAction?: string;
+}> {
   return apiRequest(
     `/projects/${encodeURIComponent(projectId)}/sections/${encodeURIComponent(sectionId)}/tutor`,
     {
       method: "POST",
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, history, learningContext }),
     },
   );
 }

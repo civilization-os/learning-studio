@@ -5,12 +5,25 @@ export type DeepSeekModel = {
   ownedBy: string;
 };
 
+async function fetchDeepSeek(
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch {
+    throw new Error(
+      "无法连接内容服务，请检查网络和 DeepSeek 服务地址后再试。",
+    );
+  }
+}
+
 export async function listDeepSeekModels(settings: AiSettings): Promise<DeepSeekModel[]> {
   if (!settings.apiKey) {
     throw new Error("请先配置 DeepSeek API Key");
   }
 
-  const response = await fetch(`${settings.baseUrl.replace(/\/$/, "")}/models`, {
+  const response = await fetchDeepSeek(`${settings.baseUrl.replace(/\/$/, "")}/models`, {
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${settings.apiKey}`,
@@ -62,7 +75,7 @@ export async function callDeepSeek(
     throw new Error("尚未选择 DeepSeek 模型");
   }
 
-  const response = await fetch(`${settings.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+  const response = await fetchDeepSeek(`${settings.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

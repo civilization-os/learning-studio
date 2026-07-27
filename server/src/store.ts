@@ -1,7 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { protectSecret, unprotectSecret } from "./secret-protection.js";
+import {
+  canPersistSecrets,
+  isSecretProtectionFormat,
+  protectSecret,
+  ProtectedSecret,
+  SecretProtectionFormat,
+  unprotectSecret,
+} from "./secret-protection.js";
 import {
   AiSettings,
   AppStore,
@@ -17,21 +24,24 @@ let apiKeyNeedsProtection = false;
 let webSearchApiKeyNeedsProtection = false;
 
 type EncryptedSecrets = {
-  format: "windows-dpapi-current-user-v1";
-  deepSeekApiKey?: string;
-  tavilyApiKey?: string;
+  deepSeekApiKey?: ProtectedSecret;
+  tavilyApiKey?: ProtectedSecret;
+};
+
+type PersistedEncryptedSecrets = {
+  format?: SecretProtectionFormat;
+  deepSeekApiKey?: string | Partial<ProtectedSecret>;
+  tavilyApiKey?: string | Partial<ProtectedSecret>;
 };
 
 type PersistedStore = {
   projects?: LearningProject[];
   aiSettings?: Partial<AiSettings>;
   webSearchSettings?: Partial<WebSearchSettings>;
-  encryptedSecrets?: Partial<EncryptedSecrets>;
+  encryptedSecrets?: PersistedEncryptedSecrets;
 };
 
-let encryptedSecrets: EncryptedSecrets = {
-  format: "windows-dpapi-current-user-v1",
-};
+let encryptedSecrets: EncryptedSecrets = {};
 
 const defaultStore: AppStore = {
   aiSettings: {
@@ -61,14 +71,17 @@ export async function readStore(): Promise<AppStore> {
         ? savedWebSearchSettings.apiKey.trim()
         : "";
 
+    const savedDeepSeekSecret = normalizePersistedSecret(
+      saved.encryptedSecrets?.deepSeekApiKey,
+      saved.encryptedSecrets?.format,
+    );
+    const savedTavilySecret = normalizePersistedSecret(
+      saved.encryptedSecrets?.tavilyApiKey,
+      saved.encryptedSecrets?.format,
+    );
     encryptedSecrets = {
-      format: "windows-dpapi-current-user-v1",
-      ...(typeof saved.encryptedSecrets?.deepSeekApiKey === "string"
-        ? { deepSeekApiKey: saved.encryptedSecrets.deepSeekApiKey }
-        : {}),
-      ...(typeof saved.encryptedSecrets?.tavilyApiKey === "string"
-        ? { tavilyApiKey: saved.encryptedSecrets.tavilyApiKey }
-        : {}),
+      ...(savedDeepSeekSecret ? { deepSeekApiKey: savedDeepSeekSecret } : {}),
+      ...(savedTavilySecret ? { tavilyApiKey: savedTavilySecret } : {}),
     };
 
     if (!runtimeApiKey && encryptedSecrets.deepSeekApiKey) {
@@ -78,7 +91,7 @@ export async function readStore(): Promise<AppStore> {
         ).trim();
       } catch (error) {
         console.warn(
-          "DeepSeek API Key 无法由当前 Windows 用户解密：",
+          "DeepSeek API Key 无法解密：",
           error instanceof Error ? error.message : error,
         );
       }
@@ -91,7 +104,7 @@ export async function readStore(): Promise<AppStore> {
         ).trim();
       } catch (error) {
         console.warn(
-          "Tavily API Key 无法由当前 Windows 用户解密：",
+          "Tavily API Key 无法解密：",
           error instanceof Error ? error.message : error,
         );
       }
@@ -123,7 +136,15 @@ export async function readStore(): Promise<AppStore> {
     };
 
     if (legacyApiKey || legacyWebSearchApiKey) {
-      await writeStore(store);
+      if (canPersistSecrets()) {
+        await writeStore(store);
+      } else {
+        apiKeyNeedsProtection = false;
+        webSearchApiKeyNeedsProtection = false;
+        console.warn(
+          "发现旧版明文 API Key，但当前系统没有可用的密钥保护；本次仅在内存中使用，后续写入会移除明文",
+        );
+      }
     }
 
     return store;
@@ -141,6 +162,25 @@ export async function readStore(): Promise<AppStore> {
       },
     };
   }
+}
+
+function normalizePersistedSecret(
+  value: string | Partial<ProtectedSecret> | undefined,
+  legacyFormat: SecretProtectionFormat | undefined,
+): ProtectedSecret | undefined {
+  if (typeof value === "string" && isSecretProtectionFormat(legacyFormat)) {
+    return { format: legacyFormat, value };
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    isSecretProtectionFormat(value.format) &&
+    typeof value.value === "string" &&
+    value.value
+  ) {
+    return { format: value.format, value: value.value };
+  }
+  return undefined;
 }
 
 export async function writeStore(store: AppStore): Promise<void> {
