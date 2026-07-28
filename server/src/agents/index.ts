@@ -6,6 +6,7 @@ import { outlineAgent } from "./outlineAgent.js";
 import { projectCreatorAgent } from "./projectCreatorAgent.js";
 import { tutorAgent } from "./tutorAgent.js";
 import { AgentDefinition } from "./types.js";
+import type { GenerationProgress } from "../generationTasks.js";
 
 const agents: Record<AgentName, AgentDefinition> = {
   "project-creator": projectCreatorAgent,
@@ -29,6 +30,7 @@ export async function runAgent(params: {
   input: Record<string, unknown>;
   projectId?: string;
   store: AppStore;
+  reportProgress?: (progress: GenerationProgress) => void;
 }): Promise<AgentRunResult> {
   const agent = agents[params.agentName];
   if (!agent) throw new Error(`未知 Agent：${params.agentName}`);
@@ -40,5 +42,6 @@ export async function runAgent(params: {
   return agent.run(params.input, {
     store: params.store,
     project,
+    reportProgress: params.reportProgress,
   });
 }

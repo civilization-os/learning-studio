@@ -21,7 +21,9 @@ export function loadStudyState(): StudyState {
         apiKey: "",
         webSearchApiKey: "",
       },
-      projects: saved.projects?.length ? saved.projects : freshDefaultState().projects,
+      projects: Array.isArray(saved.projects)
+        ? saved.projects
+        : freshDefaultState().projects,
     };
   } catch {
     return freshDefaultState();

@@ -1,8 +1,10 @@
 import { AgentName, AgentRunResult, AppStore, LearningProject } from "../types.js";
+import type { GenerationProgress } from "../generationTasks.js";
 
 export type AgentContext = {
   store: AppStore;
   project?: LearningProject;
+  reportProgress?: (progress: GenerationProgress) => void;
 };
 
 export type AgentDefinition = {

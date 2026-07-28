@@ -1,3 +1,81 @@
+export type CourseStrategyMode =
+  | "exam"
+  | "work"
+  | "academic"
+  | "quick-start"
+  | "mastery";
+
+export type DifficultyDimension =
+  | "recognition"
+  | "concept"
+  | "procedure"
+  | "calculation"
+  | "transfer"
+  | "diagnosis"
+  | "tradeoff";
+
+export type ResearchIntentPurpose =
+  | "scope"
+  | "tasks"
+  | "dependencies"
+  | "methods"
+  | "pitfalls"
+  | "evidence";
+
+export type CourseResearchIntent = {
+  purpose: ResearchIntentPurpose;
+  query: string;
+};
+
+export type CourseStrategy = {
+  schemaVersion: 1;
+  mode: CourseStrategyMode;
+  rationale: string;
+  targetEvidence: string[];
+  difficultyPriorities: DifficultyDimension[];
+  researchIntents: CourseResearchIntent[];
+};
+
+export type KnowledgeRole =
+  | "foundation"
+  | "tool"
+  | "bridge"
+  | "application"
+  | "verification";
+
+export type DifficultyFactor = {
+  dimension: DifficultyDimension;
+  level: 1 | 2 | 3 | 4 | 5;
+  reason: string;
+};
+
+export type SectionStrategy = {
+  role: KnowledgeRole;
+  whyNow: string;
+  futureUses: string[];
+  successEvidence: string[];
+  difficulty: {
+    primary: DifficultyDimension;
+    factors: DifficultyFactor[];
+  };
+};
+
+export type LessonMethodPath = {
+  name: string;
+  principle: string;
+  bestFor: string;
+  boundary: string;
+};
+
+export type LessonLearningDesign = {
+  strategyMode: CourseStrategyMode;
+  whyNow: string;
+  futureUses: string[];
+  successCriteria: string[];
+  difficultyFocus: string[];
+  methodPaths: LessonMethodPath[];
+};
+
 export type LessonSection = {
   id: string;
   title: string;
@@ -8,7 +86,75 @@ export type LessonSection = {
   estimatedMinutes?: number;
   practiceMinutes?: number;
   sourceRefs?: string[];
+  strategy?: SectionStrategy;
   content?: LessonContent;
+  learningProgress?: LessonProgress;
+};
+
+export type LessonScene = {
+  id: string;
+  type: "prediction" | "concept" | "step-reveal" | "error-diagnosis";
+  conceptKey?: string;
+  navTitle?: string;
+  title: string;
+  instruction: string;
+  body?: string;
+  options?: string[];
+  answerIndex?: number;
+  hints?: string[];
+  feedback?: {
+    correct: string;
+    incorrect: string;
+  };
+  remediation?: string;
+  misconception?: string;
+  challenge?: string;
+  steps?: string[];
+  takeaway: string;
+};
+
+export type LessonSceneEvidence = {
+  sceneId: string;
+  selectedIndex?: number;
+  correct?: boolean;
+  attempts: number;
+  hintsUsed: number;
+  completed: boolean;
+  firstTryCorrect?: boolean;
+  outcome?: "mastered" | "supported" | "needs-review" | "skipped";
+  route?: "standard" | "support" | "fast-track" | "challenge";
+  updatedAt: string;
+};
+
+export type LessonKnowledgeState = {
+  conceptKey: string;
+  label: string;
+  mastery: number;
+  evidenceCount: number;
+  correctCount: number;
+  attempts: number;
+  hintsUsed: number;
+  lastOutcome: "mastered" | "supported" | "needs-review";
+  misconception?: string;
+  lastSeenAt: string;
+  nextReviewAt: string;
+};
+
+export type LessonReflection = {
+  summary: string;
+  confidence: "uncertain" | "partial" | "ready";
+  tutorFeedback?: string;
+  updatedAt: string;
+};
+
+export type LessonProgress = {
+  schemaVersion: 1;
+  currentSceneId?: string;
+  completedSceneIds: string[];
+  evidence: Record<string, LessonSceneEvidence>;
+  knowledge?: Record<string, LessonKnowledgeState>;
+  reflection?: LessonReflection;
+  updatedAt: string;
 };
 
 export type LessonContent = {
@@ -21,7 +167,9 @@ export type LessonContent = {
     webSearchUsed: boolean;
     warning?: string;
   };
+  learningDesign?: LessonLearningDesign;
   overview: string;
+  scenes?: LessonScene[];
   mindMap: {
     center: string;
     branches: Array<{
@@ -84,6 +232,7 @@ export type OutlinePlan = {
   sessionMinutes: number;
   assumptions: string[];
   researchQueries: string[];
+  strategy?: CourseStrategy;
 };
 
 export type OutlineAudit = {

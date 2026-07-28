@@ -87,6 +87,11 @@ export const projectCreatorAgent: AgentDefinition = {
     if (!topic) throw new Error("请先填写课题名称");
 
     if (input.action === "suggest-preferences") {
+      context.reportProgress?.({
+        stage: "正在判断学习方式",
+        detail: "只推荐能从课题中可靠判断的选项",
+        progress: 24,
+      });
       if (!context.store.aiSettings.apiKey) {
         throw new Error("请先在设置中配置 DeepSeek API Key");
       }
@@ -130,6 +135,11 @@ export const projectCreatorAgent: AgentDefinition = {
         ],
         { responseFormat: "json_object", temperature: 0.1 },
       );
+      context.reportProgress?.({
+        stage: "正在检查建议",
+        detail: "去掉缺少依据的推测",
+        progress: 82,
+      });
       if (response.mocked) throw new Error("DeepSeek 尚未完成配置");
       const recommendations = parsePreferenceRecommendations(response.content);
       return {
@@ -143,6 +153,11 @@ export const projectCreatorAgent: AgentDefinition = {
     }
 
     if (input.action === "generate-description") {
+      context.reportProgress?.({
+        stage: "正在整理课题范围",
+        detail: "补充核心内容与组织方式",
+        progress: 28,
+      });
       if (!context.store.aiSettings.apiKey) {
         throw new Error("请先在设置中配置 DeepSeek API Key");
       }
@@ -183,6 +198,11 @@ export const projectCreatorAgent: AgentDefinition = {
         ],
         { responseFormat: "json_object", temperature: 0.25 },
       );
+      context.reportProgress?.({
+        stage: "正在检查描述",
+        detail: "确认没有替用户猜测目标和时间",
+        progress: 84,
+      });
       if (response.mocked) throw new Error("DeepSeek 尚未完成配置");
       const description = parseGeneratedDescription(response.content);
       return {
