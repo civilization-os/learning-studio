@@ -19,6 +19,24 @@ const generatedCourseAnalysis = {
   estimatedHours: 40,
   sessionMinutes: 45,
   assumptions: ["使用稳定版本进行学习"],
+  strategy: {
+    schemaVersion: 1,
+    mode: "work",
+    rationale: "用户希望解决实际问题，因此以真实任务、故障诊断和结果验收为主。",
+    targetEvidence: [
+      "能够交付可运行的数据处理任务",
+      "能够解释状态与恢复机制",
+      "能够定位故障并验证恢复结果",
+    ],
+    difficultyPriorities: ["concept", "diagnosis", "tradeoff", "transfer"],
+    researchIntents: [
+      { purpose: "scope", query: "Flink 官方文档 稳定版本 核心范围" },
+      { purpose: "tasks", query: "Flink 生产实践 真实任务" },
+      { purpose: "dependencies", query: "Flink 状态 恢复 前置依赖" },
+      { purpose: "pitfalls", query: "Flink Checkpoint 故障案例" },
+      { purpose: "evidence", query: "Flink 恢复 验收 可观测性" },
+    ],
+  },
   researchQueries: [
     "Flink Spring 集成 官方文档",
     "Flink 状态管理 Checkpoint 实践",
@@ -37,8 +55,8 @@ const generatedOutline = {
       estimatedHours: 5,
       sections: [
         { title: "认识核心术语", kind: "concept", outcome: "能够解释三个核心术语", estimatedMinutes: 45, practiceMinutes: 10, sourceRefs: [1] },
-        { title: "搭建运行环境", kind: "practice", outcome: "能够运行第一个示例", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [1] },
-        { title: "基础阶段复盘", kind: "review", outcome: "能够识别常见配置错误", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [2] },
+        { title: "认识核心术语", kind: "practice", outcome: "能够运行第一个示例", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [1] },
+        { title: "阶段小结", kind: "review", outcome: "能够识别常见配置错误", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [2] },
       ],
     },
     {
@@ -50,7 +68,7 @@ const generatedOutline = {
       sections: [
         { title: "拆解问题步骤", kind: "concept", outcome: "能够把目标拆成步骤", estimatedMinutes: 45, practiceMinutes: 15, sourceRefs: [1] },
         { title: "实现基础功能", kind: "practice", outcome: "能够完成基础功能", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [2] },
-        { title: "方法阶段项目", kind: "project", outcome: "能够交付可运行功能", estimatedMinutes: 60, practiceMinutes: 60, sourceRefs: [2] },
+        { title: "阶段小结", kind: "project", outcome: "能够交付可运行功能", estimatedMinutes: 60, practiceMinutes: 60, sourceRefs: [2] },
       ],
     },
     {
@@ -62,7 +80,7 @@ const generatedOutline = {
       sections: [
         { title: "设计模块边界", kind: "concept", outcome: "能够划分模块职责", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [1] },
         { title: "组合多个模块", kind: "practice", outcome: "能够完成模块集成", estimatedMinutes: 60, practiceMinutes: 45, sourceRefs: [2] },
-        { title: "流程集成项目", kind: "project", outcome: "能够演示完整流程", estimatedMinutes: 60, practiceMinutes: 90, sourceRefs: [1, 2] },
+        { title: "阶段小结", kind: "project", outcome: "能够演示完整流程", estimatedMinutes: 60, practiceMinutes: 90, sourceRefs: [1, 2] },
       ],
     },
     {
@@ -74,7 +92,7 @@ const generatedOutline = {
       sections: [
         { title: "识别异常边界", kind: "concept", outcome: "能够列出异常场景", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [1] },
         { title: "实施可靠性改进", kind: "practice", outcome: "能够修复关键缺陷", estimatedMinutes: 60, practiceMinutes: 45, sourceRefs: [2] },
-        { title: "复杂场景演练", kind: "project", outcome: "能够通过异常测试", estimatedMinutes: 60, practiceMinutes: 90, sourceRefs: [1, 2] },
+        { title: "阶段小结", kind: "project", outcome: "能够通过异常测试", estimatedMinutes: 60, practiceMinutes: 90, sourceRefs: [1, 2] },
       ],
     },
     {
@@ -86,7 +104,7 @@ const generatedOutline = {
       sections: [
         { title: "定义项目验收标准", kind: "concept", outcome: "能够编写验收清单", estimatedMinutes: 45, practiceMinutes: 20, sourceRefs: [1] },
         { title: "完成综合项目", kind: "project", outcome: "能够交付完整项目", estimatedMinutes: 90, practiceMinutes: 120, sourceRefs: [1, 2] },
-        { title: "项目复盘与改进", kind: "review", outcome: "能够形成改进计划", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [2] },
+        { title: "阶段小结", kind: "review", outcome: "能够形成改进计划", estimatedMinutes: 45, practiceMinutes: 30, sourceRefs: [2] },
       ],
     },
   ],
@@ -108,11 +126,106 @@ const incompleteOutline = {
 };
 
 const generatedLessonContent = {
+  learningDesign: {
+    strategyMode: "work",
+    whyNow: "状态与恢复是后续可靠性设计和故障排查的共同基础。",
+    futureUses: ["Checkpoint 配置", "故障恢复", "一致性语义诊断"],
+    successCriteria: [
+      "能够解释状态快照和输入位置为何必须对齐",
+      "能够从恢复现象定位错位问题",
+    ],
+    difficultyFocus: [
+      "concept：区分可观测日志与可恢复状态",
+      "diagnosis：从重复或丢失现象反推恢复错位",
+    ],
+    methodPaths: [
+      {
+        name: "一致性恢复路径",
+        principle: "状态快照与输入位置描述同一个逻辑时刻。",
+        bestFor: "需要故障恢复且保证处理一致性的流任务。",
+        boundary: "外部系统副作用未参与一致性协议时仍需额外处理。",
+      },
+    ],
+  },
   overview: "Build a reliable mental model before applying the skill.",
+  scenes: [
+    {
+      type: "prediction",
+      conceptKey: "state-recovery",
+      navTitle: "先判断恢复起点",
+      title: "Predict the first move",
+      instruction: "Choose before reading the explanation.",
+      body: "A small stream-processing job must survive a restart.",
+      options: ["Ignore state", "Define state and recovery", "Only add logs"],
+      answerIndex: 1,
+      feedback: {
+        correct: "Recovery requires explicit state and a recovery mechanism.",
+        incorrect: "Logs alone do not restore the processing state.",
+      },
+      hints: [
+        "Think about what disappears when the process restarts.",
+        "Logs describe events but do not reconstruct in-memory state.",
+      ],
+      remediation:
+        "Separate observability from recovery: logs help diagnose, while snapshots and input positions restore processing.",
+      misconception: "Observability logs are being confused with recoverable state.",
+      challenge:
+        "What additional information must stay aligned with a state snapshot?",
+      takeaway: "Start by identifying the state that must survive.",
+    },
+    {
+      type: "concept",
+      conceptKey: "state-recovery",
+      navTitle: "连接状态与恢复",
+      title: "Connect state with recovery",
+      instruction: "Focus on the relationship rather than memorizing terms.",
+      body: "State records what the job must remember; recovery rebuilds that memory after failure.",
+      takeaway: "State and recovery solve different halves of reliability.",
+    },
+    {
+      type: "step-reveal",
+      conceptKey: "checkpoint-recovery",
+      navTitle: "走一遍恢复过程",
+      title: "Reveal the recovery path",
+      instruction: "Open one step at a time and explain why it is needed.",
+      body: "Trace one failure from detection to resumed processing.",
+      steps: [
+        "Persist a consistent snapshot so there is a trusted restore point.",
+        "Detect failure and load the latest completed snapshot.",
+        "Resume inputs from the matching position and verify the result.",
+      ],
+      takeaway: "A restore point and aligned input position must work together.",
+    },
+    {
+      type: "error-diagnosis",
+      conceptKey: "checkpoint-alignment",
+      navTitle: "识别错位风险",
+      title: "Diagnose a tempting shortcut",
+      instruction: "Find the claim that breaks recovery correctness.",
+      body: "A job can restore any state snapshot while consuming from the newest input position.",
+      options: [
+        "The snapshot and input position may not match",
+        "Snapshots are always too slow",
+        "There is no problem",
+      ],
+      answerIndex: 0,
+      feedback: {
+        correct: "The state and input position must describe the same logical moment.",
+        incorrect: "Check whether restored state and resumed input still form one consistent history.",
+      },
+      hints: ["Compare the logical time represented by both pieces of data."],
+      remediation:
+        "Restore state and resume input from the same checkpoint boundary, otherwise data can be skipped or repeated.",
+      misconception: "State snapshots and input positions are treated as independent.",
+      challenge:
+        "Describe one observable symptom caused by a mismatched input position.",
+      takeaway: "Always verify that state and input progress are aligned.",
+    },
+  ],
   mindMap: {
     center: "Test lesson",
     branches: [
-      { title: "Concept", details: ["Know the core definition"] },
+      { title: "Concept" },
       { title: "Method", details: ["Follow a repeatable process"] },
       { title: "Validation", details: ["Check the observable result"] },
     ],
@@ -172,6 +285,8 @@ const generatedPreferenceRecommendations = {
 };
 let searchRequestCount = 0;
 let outlineRepairRequestCount = 0;
+let lastTutorSystemPrompt = "";
+let lastLessonUserPrompt = "";
 
 const providerServer = createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -220,6 +335,12 @@ const providerServer = createServer(async (req, res) => {
     for await (const chunk of req) requestText += chunk;
     const requestBody = JSON.parse(requestText || "{}");
     const systemPrompt = String(requestBody.messages?.[0]?.content ?? "");
+    if (systemPrompt.includes("AI 助教")) {
+      lastTutorSystemPrompt = systemPrompt;
+    }
+    if (systemPrompt.includes("课程内容生成 Agent")) {
+      lastLessonUserPrompt = String(requestBody.messages?.[1]?.content ?? "");
+    }
     const content = systemPrompt.includes("课程内容生成 Agent")
       ? JSON.stringify(generatedLessonContent)
       : systemPrompt.includes("AI 助教")
@@ -401,6 +522,19 @@ try {
   if (outlineRepairRequestCount !== 1) {
     throw new Error("expected one automatic outline repair request");
   }
+  if (
+    generated.project.chapters[0].sections[0].title ===
+    generated.project.chapters[0].sections[1].title
+  ) {
+    throw new Error("expected duplicate sibling sections to be disambiguated");
+  }
+  const repeatedCrossChapterTitles = generated.project.chapters.filter(
+    (chapter) =>
+      chapter.sections.some((section) => section.title === "阶段小结"),
+  );
+  if (repeatedCrossChapterTitles.length !== generated.project.chapters.length) {
+    throw new Error("expected repeated section titles across chapters to remain valid");
+  }
   const difficulties = generated.project.chapters.map((chapter) => chapter.difficulty);
   if (difficulties.join(",") !== "1,2,3,4,5") {
     throw new Error("expected monotonically increasing difficulty");
@@ -480,7 +614,7 @@ try {
   if (
     optimized.project.generation.generatedAt !== generatedAtBeforePolish ||
     optimized.project.sources.length !== 2 ||
-    searchRequestCount !== generatedCourseAnalysis.researchQueries.length
+    searchRequestCount !== generatedCourseAnalysis.strategy.researchIntents.length
   ) {
     throw new Error("polishing must preserve generation metadata and skip web search");
   }
@@ -500,9 +634,23 @@ try {
   }
   if (
     generatedLesson.content.exercise.answerIndex !== 1 ||
-    generatedLesson.content.mindMap.branches.length !== 3
+    generatedLesson.content.mindMap.branches.length !== 3 ||
+    generatedLesson.content.scenes.length !== 4 ||
+    generatedLesson.content.scenes[0].type !== "prediction" ||
+    generatedLesson.content.scenes[0].conceptKey !== "state-recovery" ||
+    generatedLesson.content.scenes[2].type !== "step-reveal" ||
+    generatedLesson.content.mindMap.branches[0].details.length < 1 ||
+    generatedLesson.content.learningDesign.strategyMode !== "work" ||
+    generatedLesson.content.learningDesign.methodPaths[0].boundary.length < 1
   ) {
     throw new Error("expected structured generated lesson content");
+  }
+  if (
+    !lastLessonUserPrompt.includes("整门课程地图") ||
+    !lastLessonUserPrompt.includes("工作与真实问题") ||
+    lastLessonUserPrompt.includes("官方文档 当前版本 原理 最佳实践")
+  ) {
+    throw new Error("expected strategy-aware whole-course lesson generation");
   }
 
   const cachedLesson = await request(
@@ -516,6 +664,69 @@ try {
     throw new Error("expected generated lesson content to be cached");
   }
 
+  const firstSceneId = generatedLesson.content.scenes[0].id;
+  const secondSceneId = generatedLesson.content.scenes[1].id;
+  const progressTimestamp = new Date().toISOString();
+  const savedProgress = await request(
+    `/api/projects/${encodeURIComponent(created.project.id)}/sections/${encodeURIComponent(lessonSection.id)}/progress`,
+    {
+      method: "PUT",
+      body: JSON.stringify({
+        progress: {
+          schemaVersion: 1,
+          currentSceneId: secondSceneId,
+          completedSceneIds: [firstSceneId],
+          evidence: {
+            [firstSceneId]: {
+              sceneId: firstSceneId,
+              selectedIndex: 1,
+              correct: true,
+              attempts: 1,
+              hintsUsed: 1,
+              completed: true,
+              firstTryCorrect: true,
+              outcome: "mastered",
+              route: "standard",
+              updatedAt: progressTimestamp,
+            },
+          },
+          knowledge: {
+            "state-recovery": {
+              conceptKey: "state-recovery",
+              label: "先判断恢复起点",
+              mastery: 0.88,
+              evidenceCount: 1,
+              correctCount: 1,
+              attempts: 1,
+              hintsUsed: 1,
+              lastOutcome: "mastered",
+              lastSeenAt: progressTimestamp,
+              nextReviewAt: new Date(
+                Date.now() + 7 * 24 * 60 * 60 * 1000,
+              ).toISOString(),
+            },
+          },
+          reflection: {
+            summary: "先判断数据是否持续到达，再决定用流处理还是批处理。",
+            confidence: "partial",
+            tutorFeedback: "已经抓住判断条件，还可以补上延迟要求。",
+            updatedAt: progressTimestamp,
+          },
+          updatedAt: progressTimestamp,
+        },
+      }),
+    },
+  );
+  if (
+    savedProgress.progress.currentSceneId !== secondSceneId ||
+    savedProgress.project.chapters[0].sections[0].learningProgress
+      ?.evidence[firstSceneId]?.hintsUsed !== 1 ||
+    savedProgress.progress.knowledge?.["state-recovery"]?.mastery !== 0.88 ||
+    savedProgress.progress.reflection?.confidence !== "partial"
+  ) {
+    throw new Error("expected scene learning evidence to be persisted");
+  }
+
   const tutorAnswer = await request(
     `/api/projects/${encodeURIComponent(created.project.id)}/sections/${encodeURIComponent(lessonSection.id)}/tutor`,
     {
@@ -523,11 +734,31 @@ try {
       body: JSON.stringify({
         message: "请再讲简单点",
         history: [],
+        learningContext: {
+          phase: "understand",
+          attempt: "incorrect",
+          confidence: null,
+          scene: {
+            sceneId: firstSceneId,
+            selectedIndex: 0,
+          },
+        },
       }),
     },
   );
   if (!tutorAnswer.answer.includes("助教回答")) {
     throw new Error("expected a contextual tutor answer");
+  }
+  if (
+    !lastTutorSystemPrompt.includes("Predict the first move") ||
+    !lastTutorSystemPrompt.includes('"selectedOption":"Ignore state"') ||
+    !lastTutorSystemPrompt.includes(
+      '"correctOption":"Define state and recovery"',
+    ) ||
+    !lastTutorSystemPrompt.includes("工作与真实问题") ||
+    !lastTutorSystemPrompt.includes("difficultyFocus")
+  ) {
+    throw new Error("expected tutor to receive the active scene and answer context");
   }
 
   const completedLesson = await request(
@@ -536,9 +767,32 @@ try {
   );
   if (
     completedLesson.project.chapters[0].sections[0].status !== "done" ||
-    completedLesson.project.progress <= 0
+    completedLesson.project.progress <= 0 ||
+    completedLesson.project.chapters[0].sections[0].learningProgress
+      ?.currentSceneId !== secondSceneId
   ) {
     throw new Error("expected completed lesson progress to be persisted");
+  }
+
+  const disposableProject = await request("/api/projects", {
+    method: "POST",
+    body: JSON.stringify({
+      title: "待删除项目",
+      description: "验证项目与学习记录可以一起删除",
+    }),
+  });
+  const deletion = await request(
+    `/api/projects/${encodeURIComponent(disposableProject.project.id)}`,
+    { method: "DELETE" },
+  );
+  const projectsAfterDeletion = await request("/api/projects");
+  if (
+    !deletion.deleted ||
+    projectsAfterDeletion.projects.some(
+      (project) => project.id === disposableProject.project.id,
+    )
+  ) {
+    throw new Error("expected the project to be removed from persistent storage");
   }
 
   const stored = await readFile(storePath, "utf8");

@@ -1,4 +1,9 @@
 import { callDeepSeek } from "../deepseek.js";
+import {
+  createBaseCourseStrategy,
+  formatTutorStrategyForPrompt,
+  inferStrategyMode,
+} from "../courseStrategy.js";
 import { AgentDefinition } from "./types.js";
 
 type TutorHistoryItem = {
@@ -10,6 +15,10 @@ type TutorLearningContext = {
   phase: "orient" | "understand" | "practice" | "reflect";
   attempt: "idle" | "correct" | "incorrect";
   confidence: "uncertain" | "partial" | "ready" | null;
+  scene: {
+    sceneId: string;
+    selectedIndex?: number;
+  } | null;
 };
 
 function normaliseLearningContext(value: unknown): TutorLearningContext {
@@ -32,7 +41,24 @@ function normaliseLearningContext(value: unknown): TutorLearningContext {
   )
     ? (String(input.confidence) as NonNullable<TutorLearningContext["confidence"]>)
     : null;
-  return { phase, attempt, confidence };
+  const rawScene =
+    input.scene !== null && typeof input.scene === "object"
+      ? (input.scene as Record<string, unknown>)
+      : null;
+  const scene =
+    rawScene &&
+    typeof rawScene.sceneId === "string" &&
+    rawScene.sceneId.trim()
+      ? {
+          sceneId: rawScene.sceneId.trim().slice(0, 160),
+          ...(Number.isInteger(rawScene.selectedIndex) &&
+          Number(rawScene.selectedIndex) >= 0 &&
+          Number(rawScene.selectedIndex) <= 20
+            ? { selectedIndex: Number(rawScene.selectedIndex) }
+            : {}),
+        }
+      : null;
+  return { phase, attempt, confidence, scene };
 }
 
 function normaliseHistory(value: unknown): TutorHistoryItem[] {
@@ -62,6 +88,11 @@ export const tutorAgent: AgentDefinition = {
   async run(input, context) {
     const project = context.project;
     if (!project) throw new Error("课程项目不存在");
+    context.reportProgress?.({
+      stage: "正在理解你的问题",
+      detail: "结合当前课堂步骤和最近一次作答",
+      progress: 24,
+    });
 
     const sectionId = String(input.sectionId ?? "");
     const chapter = project.chapters.find((item) =>
@@ -100,6 +131,7 @@ export const tutorAgent: AgentDefinition = {
 
     const lessonContext = section.content
       ? JSON.stringify({
+          learningDesign: section.content.learningDesign,
           overview: section.content.overview,
           mindMap: section.content.mindMap,
           explanation: section.content.explanation,
@@ -107,9 +139,56 @@ export const tutorAgent: AgentDefinition = {
           exercise: {
             question: section.content.exercise.question,
             options: section.content.exercise.options,
+            answerIndex: section.content.exercise.answerIndex,
+            explanation: section.content.exercise.explanation,
           },
         })
       : "本节课程内容尚未生成";
+    const courseStrategy =
+      project.outlinePlan?.strategy ??
+      createBaseCourseStrategy(
+        inferStrategyMode(
+          project.outlinePreferences ?? {},
+          `${project.title} ${project.description}`,
+        ),
+        `${project.title} ${project.description}`,
+      );
+    const requestedSceneId =
+      learningContext.scene?.sceneId ??
+      section.learningProgress?.currentSceneId;
+    const activeScene = requestedSceneId
+      ? section.content?.scenes?.find((scene) => scene.id === requestedSceneId)
+      : undefined;
+    const savedSceneEvidence = requestedSceneId
+      ? section.learningProgress?.evidence[requestedSceneId]
+      : undefined;
+    const selectedIndex =
+      learningContext.scene?.selectedIndex ??
+      savedSceneEvidence?.selectedIndex;
+    const activeSceneContext = activeScene
+      ? JSON.stringify({
+          id: activeScene.id,
+          type: activeScene.type,
+          title: activeScene.title,
+          instruction: activeScene.instruction,
+          body: activeScene.body,
+          options: activeScene.options,
+          selectedIndex,
+          selectedOption:
+            selectedIndex !== undefined
+              ? activeScene.options?.[selectedIndex]
+              : undefined,
+          answerIndex: activeScene.answerIndex,
+          correctOption:
+            activeScene.answerIndex !== undefined
+              ? activeScene.options?.[activeScene.answerIndex]
+              : undefined,
+          feedback: activeScene.feedback,
+          remediation: activeScene.remediation,
+          misconception: activeScene.misconception,
+          takeaway: activeScene.takeaway,
+        })
+      : "当前没有可定位的课堂互动";
     const sourceUrls = new Set(
       section.content?.research?.sourceRefs ?? section.sourceRefs ?? [],
     );
@@ -121,6 +200,11 @@ export const tutorAgent: AgentDefinition = {
       )
       .join("\n\n");
 
+    context.reportProgress?.({
+      stage: "正在组织针对性回复",
+      detail: "只解释当前卡点，不提前展开后续内容",
+      progress: 52,
+    });
     const response = await callDeepSeek(
       context.store.aiSettings,
       [
@@ -132,7 +216,9 @@ export const tutorAgent: AgentDefinition = {
 章节：${chapter.title}
 小节：${section.title}
 本节目标：${section.outcome ?? "掌握并应用本节核心知识"}
+本节在课程中的作用：${JSON.stringify(section.strategy ?? {})}
 本节内容：${lessonContext}
+当前课堂互动：${activeSceneContext}
 本节参考资料：${researchContext || "本节暂时没有可用的外部资料"}
 当前学习阶段：${phaseLabels[learningContext.phase]}
 学习证据：${attemptLabels[learningContext.attempt]}；${
@@ -140,6 +226,8 @@ export const tutorAgent: AgentDefinition = {
               ? confidenceLabels[learningContext.confidence]
               : "尚未表达主观信心"
           }
+
+${formatTutorStrategyForPrompt(courseStrategy)}
 
 规则：
 1. 优先基于本节内容回答；发现课程内容可能有误时要明确指出，不要附和错误；
@@ -150,7 +238,10 @@ export const tutorAgent: AgentDefinition = {
 6. 用户要求出题时，只给题目和选项，等用户回答后再公布答案；
 7. 回答使用简体中文纯文本，可用短段落和编号，不输出 Markdown 表格；
 8. 涉及事实、版本、API 或配置时优先依据本节参考资料；资料不足要明确说明；
-9. 不确定的事实要说明不确定，不编造来源或引用。`,
+9. 当前课堂互动存在时，题干、选项和用户选择都已经提供，不得再要求用户重复发送；应直接比较用户选择与关键条件，回答他忽略了什么；
+10. 必须根据 learningDesign 中的 difficultyFocus 判断卡点，根据 methodPaths 比较方法；任何简便路径都要同时说明适用条件和边界；
+11. 用户询问“为什么学这个”时，直接结合 whyNow 和 futureUses 回答，不得只复述本节标题；
+12. 不确定的事实要说明不确定，不编造来源或引用。`,
         },
         ...history,
         { role: "user", content: message },
@@ -162,6 +253,11 @@ export const tutorAgent: AgentDefinition = {
     }
     const answer = response.content.trim();
     if (!answer) throw new Error("AI 助教未返回有效内容");
+    context.reportProgress?.({
+      stage: "正在检查回复边界",
+      detail: "确认提示层级与当前学习阶段一致",
+      progress: 90,
+    });
 
     return {
       agent: "tutor",

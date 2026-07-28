@@ -2,6 +2,7 @@ import type {
   CourseChapter,
   LearningProject,
   LessonContent,
+  LessonProgress,
   ModelSettings,
   OutlinePreferences,
   PreferenceRecommendations,
@@ -50,6 +51,41 @@ type OutlineGenerationResponse = {
   };
 };
 
+export type GenerationTaskStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type GenerationTask = {
+  id: string;
+  type:
+    | "project-description"
+    | "preference-suggestions"
+    | "course-outline"
+    | "outline-polish"
+    | "lesson-content"
+    | "tutor-reply"
+    | "exercise"
+    | "agent-run"
+    | "connection-test";
+  title: string;
+  projectId?: string;
+  sectionId?: string;
+  status: GenerationTaskStatus;
+  stage: string;
+  detail?: string;
+  progress?: number;
+  completedUnits?: number;
+  totalUnits?: number;
+  createdAt: string;
+  startedAt?: string;
+  updatedAt: string;
+  completedAt?: string;
+  error?: string;
+};
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -72,6 +108,85 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
+async function createGenerationTask(input: {
+  type: GenerationTask["type"];
+  title: string;
+  projectId?: string;
+  sectionId?: string;
+}) {
+  const result = await apiRequest<{ task: GenerationTask }>(
+    "/generation-tasks",
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+  return result.task;
+}
+
+async function trackedApiRequest<T>(
+  path: string,
+  task: {
+    type: GenerationTask["type"];
+    title: string;
+    projectId?: string;
+    sectionId?: string;
+  },
+  init?: RequestInit,
+): Promise<T> {
+  let generationTask: GenerationTask | undefined;
+  try {
+    generationTask = await createGenerationTask(task);
+  } catch {
+    // Keep compatibility with a server that has not restarted onto the new API yet.
+  }
+  return apiRequest<T>(path, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      ...(generationTask
+        ? { "X-Generation-Task-Id": generationTask.id }
+        : {}),
+    },
+  });
+}
+
+export function subscribeGenerationTasks(
+  onTasks: (tasks: GenerationTask[]) => void,
+) {
+  const tasks = new Map<string, GenerationTask>();
+  const source = new EventSource(`${API_BASE_URL}/generation-tasks/events`);
+  const emit = () => {
+    onTasks(
+      Array.from(tasks.values()).sort((a, b) =>
+        b.updatedAt.localeCompare(a.updatedAt),
+      ),
+    );
+  };
+  const handleSnapshot = (event: Event) => {
+    const payload = JSON.parse((event as MessageEvent<string>).data) as {
+      tasks?: GenerationTask[];
+    };
+    tasks.clear();
+    for (const task of payload.tasks ?? []) tasks.set(task.id, task);
+    emit();
+  };
+  const handleTask = (event: Event) => {
+    const task = JSON.parse(
+      (event as MessageEvent<string>).data,
+    ) as GenerationTask;
+    tasks.set(task.id, task);
+    emit();
+  };
+  source.addEventListener("snapshot", handleSnapshot);
+  source.addEventListener("task", handleTask);
+  return () => {
+    source.removeEventListener("snapshot", handleSnapshot);
+    source.removeEventListener("task", handleTask);
+    source.close();
+  };
+}
+
 export async function createRemoteProject(input: {
   topic: string;
   description: string;
@@ -86,11 +201,23 @@ export async function createRemoteProject(input: {
   return result.project;
 }
 
+export async function deleteRemoteProject(
+  projectId: string,
+): Promise<{ projectId: string; deleted: boolean }> {
+  return apiRequest(`/projects/${encodeURIComponent(projectId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function generateRemoteProjectDescription(
   topic: string,
 ): Promise<string> {
-  const result = await apiRequest<{ description: string }>(
+  const result = await trackedApiRequest<{ description: string }>(
     "/projects/generate-description",
+    {
+      type: "project-description",
+      title: `补充“${topic.trim()}”的内容描述`,
+    },
     {
       method: "POST",
       body: JSON.stringify({ topic: topic.trim() }),
@@ -103,15 +230,22 @@ export async function getRemotePreferenceRecommendations(
   topic: string,
   description: string,
 ): Promise<PreferenceRecommendations> {
-  const result = await apiRequest<{
+  const result = await trackedApiRequest<{
     recommendations: PreferenceRecommendations;
-  }>("/projects/suggest-preferences", {
-    method: "POST",
-    body: JSON.stringify({
-      topic: topic.trim(),
-      description: description.trim(),
-    }),
-  });
+  }>(
+    "/projects/suggest-preferences",
+    {
+      type: "preference-suggestions",
+      title: `判断“${topic.trim()}”适合怎样学习`,
+    },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        topic: topic.trim(),
+        description: description.trim(),
+      }),
+    },
+  );
   return result.recommendations;
 }
 
@@ -120,8 +254,14 @@ export async function generateRemoteOutline(
   mode: "generate" | "optimize" = "generate",
   preferences?: OutlinePreferences,
 ): Promise<OutlineGenerationResponse> {
-  return apiRequest<OutlineGenerationResponse>(
+  return trackedApiRequest<OutlineGenerationResponse>(
     `/projects/${encodeURIComponent(projectId)}/generate-outline`,
+    {
+      type: mode === "optimize" ? "outline-polish" : "course-outline",
+      title:
+        mode === "optimize" ? "整理大纲新增节点" : "重新规划学习路线",
+      projectId,
+    },
     {
       method: "POST",
       body: JSON.stringify({ mode, preferences }),
@@ -149,8 +289,14 @@ export async function generateRemoteLesson(
   sourceCount?: number;
   warning?: string;
 }> {
-  return apiRequest(
+  return trackedApiRequest(
     `/projects/${encodeURIComponent(projectId)}/sections/${encodeURIComponent(sectionId)}/generate-content`,
+    {
+      type: "lesson-content",
+      title: force ? "检查并更新本节课堂" : "准备本节课堂",
+      projectId,
+      sectionId,
+    },
     {
       method: "POST",
       body: JSON.stringify({ force }),
@@ -158,9 +304,32 @@ export async function generateRemoteLesson(
   );
 }
 
+export async function saveRemoteLessonProgress(
+  projectId: string,
+  sectionId: string,
+  progress: LessonProgress,
+): Promise<{
+  project: LearningProject;
+  progress: LessonProgress;
+}> {
+  return apiRequest(
+    `/projects/${encodeURIComponent(projectId)}/sections/${encodeURIComponent(sectionId)}/progress`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ progress }),
+    },
+  );
+}
+
 export type TutorHistoryItem = {
   role: "user" | "assistant";
   content: string;
+};
+
+export type TutorSceneContext = {
+  sceneId: string;
+  selectedIndex?: number;
+  correct?: boolean;
 };
 
 export async function askRemoteTutor(
@@ -172,14 +341,21 @@ export async function askRemoteTutor(
     phase: "orient" | "understand" | "practice" | "reflect";
     attempt: "idle" | "correct" | "incorrect";
     confidence: "uncertain" | "partial" | "ready" | null;
+    scene?: TutorSceneContext;
   },
 ): Promise<{
   answer: string;
   suggestions: string[];
   recommendedAction?: string;
 }> {
-  return apiRequest(
+  return trackedApiRequest(
     `/projects/${encodeURIComponent(projectId)}/sections/${encodeURIComponent(sectionId)}/tutor`,
+    {
+      type: "tutor-reply",
+      title: "助教正在结合当前课堂回答",
+      projectId,
+      sectionId,
+    },
     {
       method: "POST",
       body: JSON.stringify({ message, history, learningContext }),
@@ -269,10 +445,17 @@ export async function testRemoteAiConnection(
   apiKeyPersisted: boolean;
 }> {
   const savedSettings = await updateRemoteAiSettings(settings);
-  const result = await apiRequest<{ content: string; mocked: boolean }>("/ai/chat", {
-    method: "POST",
-    body: JSON.stringify({ message: "请只回复：连接正常" }),
-  });
+  const result = await trackedApiRequest<{ content: string; mocked: boolean }>(
+    "/ai/chat",
+    {
+      type: "connection-test",
+      title: "测试内容服务连接",
+    },
+    {
+      method: "POST",
+      body: JSON.stringify({ message: "请只回复：连接正常" }),
+    },
+  );
   return {
     ...result,
     apiKeyConfigured: savedSettings.apiKeyConfigured,

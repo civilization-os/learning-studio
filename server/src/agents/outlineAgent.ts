@@ -1,11 +1,21 @@
 import { callDeepSeek } from "../deepseek.js";
 import {
+  createBaseCourseStrategy,
+  formatCourseStrategyForPrompt,
+  inferStrategyMode,
+  mergeCourseStrategy,
+} from "../courseStrategy.js";
+import {
+  CourseStrategy,
   CourseChapter,
+  DifficultyDimension,
+  KnowledgeRole,
   LearningProject,
   OutlineAudit,
   OutlinePlan,
   OutlinePolishPatch,
   OutlinePreferences,
+  SectionStrategy,
   WebSource,
 } from "../types.js";
 import { searchWeb } from "../webSearch.js";
@@ -33,6 +43,7 @@ type GeneratedSection = {
   estimatedMinutes?: unknown;
   practiceMinutes?: unknown;
   sourceRefs?: unknown;
+  strategy?: unknown;
 };
 
 type GeneratedCourseAnalysis = {
@@ -44,6 +55,7 @@ type GeneratedCourseAnalysis = {
   sessionMinutes?: unknown;
   assumptions?: unknown;
   researchQueries?: unknown;
+  strategy?: unknown;
 };
 
 type GeneratedAudit = {
@@ -77,6 +89,22 @@ type ManualOutlineNode = {
 
 const sectionKinds = new Set(["concept", "practice", "project", "review"]);
 const courseDepths = new Set(["intro", "standard", "deep"]);
+const knowledgeRoles = new Set<KnowledgeRole>([
+  "foundation",
+  "tool",
+  "bridge",
+  "application",
+  "verification",
+]);
+const difficultyDimensions = new Set<DifficultyDimension>([
+  "recognition",
+  "concept",
+  "procedure",
+  "calculation",
+  "transfer",
+  "diagnosis",
+  "tradeoff",
+]);
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -105,10 +133,151 @@ function extractJsonObject<T>(content: string): T {
   return JSON.parse(content.slice(jsonStart, jsonEnd + 1)) as T;
 }
 
+function makeUniqueTitle(
+  title: string,
+  usedTitles: Set<string>,
+  suffix: string,
+): string {
+  const normalizedTitle = title.toLocaleLowerCase();
+  if (!usedTitles.has(normalizedTitle)) {
+    usedTitles.add(normalizedTitle);
+    return title;
+  }
+
+  let duplicateIndex = 1;
+  let candidate = title;
+  do {
+    const label =
+      duplicateIndex === 1 ? suffix : `${suffix} ${duplicateIndex}`;
+    candidate = `${title.slice(0, Math.max(1, 96 - label.length))}（${label}）`;
+    duplicateIndex += 1;
+  } while (usedTitles.has(candidate.toLocaleLowerCase()));
+
+  usedTitles.add(candidate.toLocaleLowerCase());
+  return candidate;
+}
+
+function normaliseSectionStrategy(
+  value: unknown,
+  fallback: {
+    title: string;
+    outcome: string;
+    kind: "concept" | "practice" | "project" | "review";
+    courseStrategy?: CourseStrategy;
+  },
+): SectionStrategy {
+  const input =
+    value !== null && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const difficulty =
+    input.difficulty !== null && typeof input.difficulty === "object"
+      ? (input.difficulty as Record<string, unknown>)
+      : {};
+  const defaultRole: KnowledgeRole =
+    fallback.kind === "project"
+      ? "application"
+      : fallback.kind === "practice" || fallback.kind === "review"
+        ? "verification"
+        : /基础|定义|概念|起点/.test(fallback.title)
+          ? "foundation"
+          : /方法|工具|运算|配置/.test(fallback.title)
+            ? "tool"
+            : "bridge";
+  const defaultPrimary: DifficultyDimension =
+    fallback.kind === "project"
+      ? "transfer"
+      : fallback.kind === "practice" || fallback.kind === "review"
+        ? "diagnosis"
+        : fallback.courseStrategy?.difficultyPriorities[0] ?? "concept";
+  const role =
+    typeof input.role === "string" &&
+    knowledgeRoles.has(input.role as KnowledgeRole)
+      ? (input.role as KnowledgeRole)
+      : defaultRole;
+  const primary =
+    typeof difficulty.primary === "string" &&
+    difficultyDimensions.has(difficulty.primary as DifficultyDimension)
+      ? (difficulty.primary as DifficultyDimension)
+      : defaultPrimary;
+  const stringList = (raw: unknown, fallbackItems: string[], limit: number) => {
+    if (!Array.isArray(raw)) return fallbackItems;
+    const items = raw
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim().slice(0, 240))
+      .filter(Boolean)
+      .slice(0, limit);
+    return items.length ? items : fallbackItems;
+  };
+  const factors = Array.isArray(difficulty.factors)
+    ? difficulty.factors
+        .filter(
+          (factor): factor is Record<string, unknown> =>
+            factor !== null && typeof factor === "object",
+        )
+        .flatMap((factor) => {
+          if (
+            typeof factor.dimension !== "string" ||
+            !difficultyDimensions.has(
+              factor.dimension as DifficultyDimension,
+            ) ||
+            typeof factor.level !== "number" ||
+            !Number.isInteger(factor.level) ||
+            factor.level < 1 ||
+            factor.level > 5 ||
+            typeof factor.reason !== "string" ||
+            !factor.reason.trim()
+          ) {
+            return [];
+          }
+          return [
+            {
+              dimension: factor.dimension as DifficultyDimension,
+              level: factor.level as 1 | 2 | 3 | 4 | 5,
+              reason: factor.reason.trim().slice(0, 200),
+            },
+          ];
+        })
+        .slice(0, 5)
+    : [];
+  return {
+    role,
+    whyNow:
+      typeof input.whyNow === "string" && input.whyNow.trim()
+        ? input.whyNow.trim().slice(0, 240)
+        : `现在学习“${fallback.title}”，是为了建立后续学习所需的直接能力。`,
+    futureUses: stringList(
+      input.futureUses,
+      [`用于后续内容中对“${fallback.title}”的应用与判断。`],
+      5,
+    ),
+    successEvidence: stringList(
+      input.successEvidence,
+      [fallback.outcome],
+      5,
+    ),
+    difficulty: {
+      primary,
+      factors: factors.length
+        ? factors
+        : [
+            {
+              dimension: primary,
+              level: 2,
+              reason: `需要能够独立完成“${fallback.outcome}”，而不只是复述结论。`,
+            },
+          ],
+    },
+  };
+}
+
 function parseGeneratedOutline(
   content: string,
   sources: WebSource[],
-  plan?: Pick<OutlinePlan, "estimatedHours" | "sessionMinutes">,
+  plan?: Pick<
+    OutlinePlan,
+    "estimatedHours" | "sessionMinutes" | "strategy"
+  >,
 ): {
   chapters: CourseChapter[];
   outlineSummary: OutlineSummary;
@@ -150,7 +319,7 @@ function parseGeneratedOutline(
 
   const timestamp = Date.now();
   let sectionIndex = 0;
-  const usedTitles = new Set<string>();
+  const usedChapterTitles = new Set<string>();
   const chapters = parsed.chapters.map((chapter, chapterIndex) => {
     const sections = Array.isArray(chapter.sections)
       ? (chapter.sections as GeneratedSection[])
@@ -164,12 +333,12 @@ function parseGeneratedOutline(
       throw new Error(`第 ${chapterIndex + 1} 章结构不完整`);
     }
 
-    const chapterTitle = chapter.title.trim().slice(0, 100);
-    const normalizedChapterTitle = chapterTitle.toLocaleLowerCase();
-    if (usedTitles.has(normalizedChapterTitle)) {
-      throw new Error("模型返回了重复章节");
-    }
-    usedTitles.add(normalizedChapterTitle);
+    const chapterTitle = makeUniqueTitle(
+      chapter.title.trim().slice(0, 100),
+      usedChapterTitles,
+      "后续",
+    );
+    const usedSectionTitles = new Set<string>();
     const objective =
       typeof chapter.objective === "string" && chapter.objective.trim()
         ? chapter.objective.trim().slice(0, 240)
@@ -214,7 +383,7 @@ function parseGeneratedOutline(
       prerequisites,
       estimatedHours,
       sections: sections.map((section, currentSectionIndex) => {
-        const sectionTitle =
+        const rawSectionTitle =
           typeof section?.title === "string"
             ? section.title.trim().slice(0, 100)
             : "";
@@ -222,11 +391,11 @@ function parseGeneratedOutline(
           typeof section?.kind === "string" &&
           sectionKinds.has(section.kind)
             ? section.kind
-            : /复盘|总结|测试|模拟/.test(sectionTitle)
+            : /复盘|总结|测试|模拟/.test(rawSectionTitle)
               ? "review"
-              : /练习|题型|真题|实训/.test(sectionTitle)
+              : /练习|题型|真题|实训/.test(rawSectionTitle)
                 ? "practice"
-                : /项目|实战|综合应用/.test(sectionTitle)
+                : /项目|实战|综合应用/.test(rawSectionTitle)
                   ? "project"
                   : "concept";
         const estimatedMinutes =
@@ -246,21 +415,28 @@ function parseGeneratedOutline(
         const outcome =
           typeof section?.outcome === "string" && section.outcome.trim()
             ? section.outcome.trim().slice(0, 240)
-            : `能够说明并应用${sectionTitle}的核心方法。`;
+            : `能够说明并应用${rawSectionTitle}的核心方法。`;
         if (
           !section ||
-          !sectionTitle
+          !rawSectionTitle
         ) {
           throw new Error(
             `第 ${chapterIndex + 1} 章第 ${currentSectionIndex + 1} 节结构不完整`,
           );
         }
-
-        const normalizedSectionTitle = sectionTitle.toLocaleLowerCase();
-        if (usedTitles.has(normalizedSectionTitle)) {
-          throw new Error("模型返回了重复小节");
-        }
-        usedTitles.add(normalizedSectionTitle);
+        const kindSuffix =
+          normalizedKind === "practice"
+            ? "练习"
+            : normalizedKind === "project"
+              ? "应用"
+              : normalizedKind === "review"
+                ? "复盘"
+                : "概念";
+        const sectionTitle = makeUniqueTitle(
+          rawSectionTitle,
+          usedSectionTitles,
+          kindSuffix,
+        );
 
         sectionIndex += 1;
         const sourceRefs = Array.isArray(section.sourceRefs)
@@ -287,6 +463,16 @@ function parseGeneratedOutline(
           outcome,
           estimatedMinutes,
           practiceMinutes,
+          strategy: normaliseSectionStrategy(section.strategy, {
+            title: sectionTitle,
+            outcome,
+            kind: normalizedKind as
+              | "concept"
+              | "practice"
+              | "project"
+              | "review",
+            courseStrategy: plan?.strategy,
+          }),
           ...(sourceRefs.length ? { sourceRefs } : {}),
         };
       }),
@@ -349,6 +535,7 @@ function normalizePreferences(value: unknown): OutlinePreferences {
 function parseCourseAnalysis(
   content: string,
   preferences: OutlinePreferences,
+  contextText: string,
 ): OutlinePlan {
   const parsed = extractJsonObject<GeneratedCourseAnalysis>(content);
   if (
@@ -368,15 +555,20 @@ function parseCourseAnalysis(
     parsed.sessionMinutes > 180 ||
     !Array.isArray(parsed.assumptions) ||
     !parsed.assumptions.every((item) => typeof item === "string") ||
-    !Array.isArray(parsed.researchQueries) ||
-    parsed.researchQueries.length < 2 ||
-    parsed.researchQueries.length > 5 ||
-    !parsed.researchQueries.every(
-      (item) => typeof item === "string" && item.trim(),
-    )
+    (parsed.researchQueries !== undefined &&
+      (!Array.isArray(parsed.researchQueries) ||
+        !parsed.researchQueries.every(
+          (item) => typeof item === "string" && item.trim(),
+        )))
   ) {
     throw new Error("课程范围判断结果不完整");
   }
+
+  const mode = inferStrategyMode(preferences, contextText);
+  const strategy = mergeCourseStrategy(
+    parsed.strategy as Partial<CourseStrategy> | undefined,
+    createBaseCourseStrategy(mode, contextText),
+  );
 
   return {
     courseType: parsed.courseType.trim().slice(0, 80),
@@ -398,13 +590,8 @@ function parseCourseAnalysis(
       .map((item) => item.trim().slice(0, 200))
       .filter(Boolean)
       .slice(0, 8),
-    researchQueries: Array.from(
-      new Set(
-        parsed.researchQueries
-          .map((item) => item.trim().slice(0, 240))
-          .filter(Boolean),
-      ),
-    ).slice(0, 5),
+    researchQueries: strategy.researchIntents.map((intent) => intent.query),
+    strategy,
   };
 }
 
@@ -452,7 +639,11 @@ async function researchCourse(
   context: Parameters<AgentDefinition["run"]>[1],
 ): Promise<ResearchBundle> {
   const results = await Promise.all(
-    plan.researchQueries.map(async (query) => {
+    (plan.strategy?.researchIntents ??
+      plan.researchQueries.map((query) => ({
+        purpose: "scope" as const,
+        query,
+      }))).map(async ({ query }) => {
       try {
         return await searchWeb(context.store.webSearchSettings, query, {
           maxResults: 4,
@@ -582,6 +773,11 @@ async function polishManualNodes(
   project: LearningProject,
   context: Parameters<AgentDefinition["run"]>[1],
 ) {
+  context.reportProgress?.({
+    stage: "正在整理新增节点",
+    detail: "只处理手动加入的章节和小节",
+    progress: 30,
+  });
   const targets = collectManualNodes(project);
   if (!targets.length) {
     return {
@@ -652,6 +848,11 @@ ${JSON.stringify(targets)}
       ],
       { responseFormat: "json_object", temperature: 0.15 },
     );
+    context.reportProgress?.({
+      stage: "正在核对修改范围",
+      detail: "确认原有课程结构保持不变",
+      progress: 86,
+    });
     const patches = parsePolishPatches(response.content, targets);
     return {
       agent: "outline" as const,
@@ -685,6 +886,14 @@ export const outlineAgent: AgentDefinition = {
   async run(input, context) {
     const project = context.project;
     const mode = input.mode === "optimize" ? "optimize" : "generate";
+    context.reportProgress?.({
+      stage: mode === "optimize" ? "正在读取新增节点" : "正在读取课程要求",
+      detail:
+        mode === "optimize"
+          ? "确认本次需要整理的内容"
+          : "整理目标、基础、范围和时间",
+      progress: 8,
+    });
     const fallbackChapters = buildFallbackChapters(project?.chapters ?? []);
     if (!project) {
       return {
@@ -728,6 +937,11 @@ export const outlineAgent: AgentDefinition = {
 
     let outlinePlan: OutlinePlan;
     try {
+      const strategyContext = `${project.title} ${project.description}`;
+      const preliminaryStrategy = createBaseCourseStrategy(
+        inferStrategyMode(preferences, strategyContext),
+        strategyContext,
+      );
       const analysisPrompt = `请先判断这门课程的类型、边界和合理规模，不要生成章节大纲。
 
 学习主题：${project.title}
@@ -735,6 +949,9 @@ export const outlineAgent: AgentDefinition = {
 
 用户补充：
 ${formatPreferences(preferences)}
+
+系统已经根据用户明确目标确定主要课程策略。你不能改成其他模式，只能把目标证据、难度重点和检索意图补充得更贴合本课程：
+${formatCourseStrategyForPrompt(preliminaryStrategy)}
 
 只输出 JSON 对象，必须包含：
 - courseType：课程类型，例如考试复习、项目实战、职业技能、学术基础、兴趣探索；
@@ -744,7 +961,12 @@ ${formatPreferences(preferences)}
 - estimatedHours：合理的总投入小时数，必须是数字；
 - sessionMinutes：一堂课堂适合的分钟数，必须是数字；
 - assumptions：数组，只记录用户未明确、由你推断的事项；
-- researchQueries：2–5 条不同目的的搜索词数组。
+- strategy：必须包含 schemaVersion、mode、rationale、targetEvidence、difficultyPriorities、researchIntents；
+- strategy.mode 必须原样使用 "${preliminaryStrategy.mode}"；
+- strategy.targetEvidence：3–8 个完成课程后可观察、可验证的行为证据；
+- strategy.difficultyPriorities：从 recognition、concept、procedure、calculation、transfer、diagnosis、tradeoff 中选择；
+- strategy.researchIntents：2–6 项，每项包含 purpose 和 query；purpose 只能是 scope、tasks、dependencies、methods、pitfalls、evidence；
+- researchQueries：为兼容旧数据，可返回 strategy.researchIntents 中 query 的数组。
 
 判断规则：
 1. 用户明确选择的内容优先级最高，不得擅自改写；
@@ -757,11 +979,9 @@ ${formatPreferences(preferences)}
 4. 时间预算是现实上限；当它与覆盖程度冲突时，在预算内优先保留最相关内容，并把取舍写进 assumptions；
 5. 用户未限定总时间时，单门课程按 8–120 小时规划；未限定单次时长时，在 30–90 分钟内选择，不得生成 150 分钟等极端课堂；
 6. 不使用固定章节数或固定小节数推算课程规模，总课时较大时必须拆成多个可管理章节；
-7. 考试类课程优先规划官方范围、题型分布和复习路径查询；
-8. 软件与工具类课程优先规划官方文档、当前版本、实践任务和常见问题查询；
-9. 学术类课程优先规划权威教材目录、前置关系、核心定理与练习体系查询；
-10. researchQueries 必须服务于课程范围判断，不能只是同一句话的改写；
-11. 不输出章节、Markdown 或额外解释。`;
+7. 目标证据必须能反向驱动课程取舍，不能写“了解、熟悉”等无法验证的词；
+8. 检索意图必须说明用途，不能只是同一句话的改写；考试课程要查范围、题型、方法边界、易错与依赖，工作课程要查官方机制、真实任务、失败案例、权衡与验收；
+9. 不输出章节、Markdown 或额外解释。`;
 
       const analysisResponse = await callDeepSeek(
         context.store.aiSettings,
@@ -775,9 +995,15 @@ ${formatPreferences(preferences)}
         ],
         { responseFormat: "json_object", temperature: 0.15 },
       );
+      context.reportProgress?.({
+        stage: "正在确定课程边界",
+        detail: "明确最终要学会什么以及课程规模",
+        progress: 24,
+      });
       outlinePlan = parseCourseAnalysis(
         analysisResponse.content,
         preferences,
+        strategyContext,
       );
     } catch (error) {
       return {
@@ -798,8 +1024,17 @@ ${formatPreferences(preferences)}
       };
     }
 
+    context.reportProgress?.({
+      stage: "正在查找可靠资料",
+      detail: "分别核对范围、任务、依赖、方法和常见问题",
+      progress: 34,
+    });
     const research = await researchCourse(outlinePlan, context);
-    const query = outlinePlan.researchQueries.join(" | ");
+    const query = (
+      outlinePlan.strategy?.researchIntents.map(
+        (intent) => `${intent.purpose}:${intent.query}`,
+      ) ?? outlinePlan.researchQueries
+    ).join(" | ");
     const curriculumPrompt = `根据已经确认的课程范围和检索资料，编排一份可直接进入课堂学习的中文课程大纲。
 
 学习主题：${project.title}
@@ -811,12 +1046,18 @@ ${formatPreferences(preferences)}
 课程范围判断：
 ${JSON.stringify(outlinePlan)}
 
+课程策略（这是编排约束，不是宣传文案）：
+${outlinePlan.strategy
+  ? formatCourseStrategyForPrompt(outlinePlan.strategy)
+  : "沿用课程范围判断中的目标与证据。"}
+
 联网资料：
 ${formatSources(research.sources)}
 
 只输出 JSON 对象，顶层必须包含 audience、courseGoal、estimatedHours、chapters。
 每个 chapter 必须包含 title、difficulty、objective、prerequisites、estimatedHours、sections。
-每个 section 必须包含 title、kind、outcome、estimatedMinutes、practiceMinutes、sourceRefs。
+每个 section 必须包含 title、kind、outcome、estimatedMinutes、practiceMinutes、sourceRefs、strategy。
+section.strategy 必须包含 role、whyNow、futureUses、successEvidence、difficulty；difficulty 包含 primary 和 factors。
 
 编排规则：
 1. 章节和小节数量必须由知识范围、总时间和前置关系自然产生，不追求整齐，不固定为某个数字；
@@ -825,13 +1066,21 @@ ${formatSources(research.sources)}
 4. practiceMinutes 是课后练习或独立任务时间，可以为 0；章节 estimatedHours 包含课堂、练习、复习和测试，总和应与 ${outlinePlan.estimatedHours} 小时基本一致；
 5. 每节只解决一个明确问题，并给出可验证 outcome；不要用斜杠或顿号把多个独立主题硬塞进一个标题；
 6. kind 只能是 concept、practice、project、review，并根据课程类型安排，不要机械要求每章完全相同；
-7. prerequisites 只能引用此前已经具备或已经学过的能力，章节顺序必须服从依赖；
-8. 考试课程必须覆盖正式范围并安排题型练习、错题复盘和模拟检验；项目课程必须围绕可交付成果；技能课程必须包含真实任务；
-9. difficulty 使用 1–5，随能力要求整体递进，但允许复习章节保持同级；
-10. sourceRefs 只能填写联网资料前的数字编号，每节选择 0–4 个真正相关来源；
-11. 没有资料支持的事实不要伪造引用；标题不得包含 URL、来源编号或 Markdown。`;
+7. 先从 targetEvidence 反向建立能力和知识依赖，再排序；必须主动寻找标题里不明显、但会支撑后续题型、任务或概念的 bridge/tool 节点；
+8. 每节 strategy.role 只能是 foundation、tool、bridge、application、verification；whyNow 说明为何此刻学习，futureUses 指向后续具体题型/任务/章节，successEvidence 必须可观察；
+9. difficulty.primary 与 factors 必须指出难点来自 recognition、concept、procedure、calculation、transfer、diagnosis 或 tradeoff；不要用总星级代替难点来源；
+10. 方法型小节要安排方法比较、适用条件和失效边界；考试课程不能只按教材目录罗列，工作课程不能只按 API 目录罗列；
+11. 对“必学、高价值桥梁、扩展、略过”做实际取舍；不要因为资料标题没写就忽略后续高频复用的桥梁知识；
+12. difficulty 使用 1–5，随能力要求整体递进，但允许复习章节保持同级；
+13. sourceRefs 只能填写联网资料前的数字编号，每节选择 0–4 个真正相关来源；
+14. 没有资料支持的事实不要伪造引用；标题不得包含 URL、来源编号或 Markdown。`;
 
     try {
+      context.reportProgress?.({
+        stage: "正在编排课程路线",
+        detail: "从学习结果反推章节、桥梁知识和练习",
+        progress: 54,
+      });
       const draftResponse = await callDeepSeek(
         context.store.aiSettings,
         [
@@ -853,6 +1102,11 @@ ${formatSources(research.sources)}
           outlinePlan,
         );
       } catch (initialError) {
+        context.reportProgress?.({
+          stage: "正在修正课程结构",
+          detail: "补全缺失字段与不合理的课堂颗粒度",
+          progress: 72,
+        });
         const repairResponse = await callDeepSeek(
           context.store.aiSettings,
           [
@@ -874,12 +1128,13 @@ ${JSON.stringify(outlinePlan)}
 必须满足：
 1. 顶层包含 audience、courseGoal、estimatedHours、chapters；
 2. 每章包含 title、objective、prerequisites、estimatedHours、sections；
-3. 每节包含 title、kind、outcome、estimatedMinutes、practiceMinutes、sourceRefs；
+3. 每节包含 title、kind、outcome、estimatedMinutes、practiceMinutes、sourceRefs、strategy；
 4. kind 只能是 concept、practice、project、review；
 5. 约 ${outlinePlan.estimatedHours} 小时的课程必须拆成多个合理章节，每节约 ${outlinePlan.sessionMinutes} 分钟；
 6. sourceRefs 只能使用 1–${Math.max(1, research.sources.length)} 的整数；
 7. 保留原大纲中有效的具体内容，不得退化为“基础认知、核心概念、基本方法”等占位词；
-8. 只输出完整 JSON，不输出解释。
+8. strategy 包含 role、whyNow、futureUses、successEvidence、difficulty；不得删除原有有效策略字段；
+9. 只输出完整 JSON，不输出解释。
 
 待修复大纲：
 ${draftContent.slice(0, 30_000)}`,
@@ -924,6 +1179,12 @@ ${formatSources(research.sources).slice(0, 12_000)}
 5. 重复：相邻章节和小节是否换个说法重复；
 6. 验证：每章是否有与课程类型相符的练习、项目或检验；
 7. 来源：引用编号是否真的支持对应内容。
+8. 反向依赖：从每项 targetEvidence 倒推，所需 foundation、tool、bridge、application、verification 是否齐全；
+9. 后续用途：每个关键小节是否说明为什么现在学、后面用于什么；futureUses 是否具体而非套话；
+10. 难点来源：是否明确识别、概念、步骤、计算、迁移、诊断或权衡，是否把所有难度压成一个星级；
+11. 方法边界：关键方法是否包含原理、适用条件、简便路径与失效边界；
+12. 目标模式：考试课程检查题型识别、方法选择、变式和失分原因；工作课程检查机制、约束、故障、权衡和验收证据；
+13. 取舍：明确保留必要内容和高价值桥梁，扩展或略过的内容必须有目标或时间依据。
 
 只输出修正后的完整 JSON。保留 audience、courseGoal、estimatedHours、chapters 及其全部字段，并额外增加 audit：
 - status：没有修改时为 passed，有修改时为 adjusted；
@@ -935,6 +1196,11 @@ ${formatSources(research.sources).slice(0, 12_000)}
 不要为了形式改变章节数量；只有检查发现真实问题时才调整。`;
 
       try {
+        context.reportProgress?.({
+          stage: "正在做发布前检查",
+          detail: "检查遗漏、重复、顺序、难度与后续用途",
+          progress: 84,
+        });
         const auditResponse = await callDeepSeek(
           context.store.aiSettings,
           [
@@ -953,6 +1219,11 @@ ${formatSources(research.sources).slice(0, 12_000)}
           outlinePlan,
         );
         outlineAudit = parseOutlineAudit(auditResponse.content);
+        context.reportProgress?.({
+          stage: "正在保存新版课程",
+          detail: "检查通过，准备替换课程结构",
+          progress: 96,
+        });
         if (!outlineAudit) {
           auditWarning = "大纲已完成结构检查，但检查摘要没有完整返回。";
         }

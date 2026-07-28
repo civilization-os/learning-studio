@@ -267,3 +267,12 @@ export async function createProject(input: { title: string; description: string 
   await writeStore(store);
   return project;
 }
+
+export async function deleteProject(projectId: string): Promise<boolean> {
+  const store = await readStore();
+  const nextProjects = store.projects.filter((project) => project.id !== projectId);
+  if (nextProjects.length === store.projects.length) return false;
+  store.projects = nextProjects;
+  await writeStore(store);
+  return true;
+}
