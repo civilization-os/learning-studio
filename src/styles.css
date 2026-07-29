@@ -120,6 +120,13 @@ main.classroom-page {
   margin: 0;
 }
 
+.math-fragment .katex,
+.math-fragment .katex * {
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
+}
+
 .classroom-breadcrumb {
   min-width: 0;
   padding-left: 2px;
@@ -5318,7 +5325,8 @@ label {
   font-weight: 950;
 }
 
-.lesson-scene-options button span {
+.lesson-scene-options button > span {
+  min-width: 0;
   font-size: 0.82rem;
   font-weight: 820;
   line-height: 1.45;
@@ -5383,7 +5391,7 @@ label {
   animation: stage-arrive 180ms ease both;
 }
 
-.lesson-scene-hints > ol li span {
+.lesson-scene-hints > ol li > span {
   display: grid;
   place-items: center;
   width: 25px;
@@ -5394,10 +5402,16 @@ label {
   font-weight: 950;
 }
 
-.lesson-scene-hints > ol li p {
+.lesson-scene-hints > ol li > p {
+  min-width: 0;
+  width: 100%;
   font-size: 0.78rem;
   font-weight: 720;
   line-height: 1.6;
+}
+
+.lesson-scene-hints > ol li > p .math-text {
+  width: 100%;
 }
 
 .lesson-scene-hints > small {
@@ -5528,7 +5542,7 @@ label {
   content: "";
 }
 
-.lesson-scene-reveal li span {
+.lesson-scene-reveal li > span {
   z-index: 1;
   display: grid;
   place-items: center;
@@ -5541,7 +5555,8 @@ label {
   font-weight: 950;
 }
 
-.lesson-scene-reveal li p {
+.lesson-scene-reveal li > p {
+  min-width: 0;
   border-radius: 17px;
   background: white;
   padding: 13px 15px;
@@ -6872,8 +6887,8 @@ label {
   gap: 8px;
 }
 
-.practice-task > header small,
-.practice-task > header span {
+.practice-task > header > div > small,
+.practice-task > header > div > span {
   border-radius: 999px;
   background: #e6f2ff;
   padding: 6px 9px;
@@ -6882,7 +6897,7 @@ label {
   font-weight: 900;
 }
 
-.practice-task > header span {
+.practice-task > header > div > span {
   background: #f0f3f7;
   color: var(--muted);
 }
@@ -6891,6 +6906,10 @@ label {
   color: var(--ink);
   font-size: clamp(1.12rem, 1.55vw, 1.45rem);
   line-height: 1.5;
+}
+
+.practice-task > header h3 .math-text {
+  overflow-wrap: normal;
 }
 
 .practice-options {
