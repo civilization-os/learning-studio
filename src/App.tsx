@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import {
   askRemoteTutor,
   completeRemoteSection,
@@ -68,6 +70,73 @@ const knowledgeRoleLabels = {
   application: "应用",
   verification: "检验",
 };
+
+type MathTextPart =
+  | { kind: "text"; value: string }
+  | { displayMode: boolean; kind: "math"; value: string };
+
+function splitMathText(value: string): MathTextPart[] {
+  const parts: MathTextPart[] = [];
+  const pattern = /(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g;
+  let cursor = 0;
+
+  for (const match of value.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    const raw = match[0];
+    if (index > cursor) {
+      parts.push({ kind: "text", value: value.slice(cursor, index) });
+    }
+
+    const displayMode = raw.startsWith("\\[") || raw.startsWith("$$");
+    const delimiterLength = raw.startsWith("\\") ? 2 : displayMode ? 2 : 1;
+    parts.push({
+      kind: "math",
+      displayMode,
+      value: raw.slice(delimiterLength, -delimiterLength).trim(),
+    });
+    cursor = index + raw.length;
+  }
+
+  if (cursor < value.length) {
+    parts.push({ kind: "text", value: value.slice(cursor) });
+  }
+
+  return parts.length ? parts : [{ kind: "text", value }];
+}
+
+function MathText({
+  value,
+  className = "",
+}: {
+  value: string;
+  className?: string;
+}) {
+  const parts = useMemo(() => splitMathText(value), [value]);
+
+  return (
+    <span className={["math-text", className].filter(Boolean).join(" ")}>
+      {parts.map((part, index) =>
+        part.kind === "text" ? (
+          <span key={`text-${index}`}>{part.value}</span>
+        ) : (
+          <span
+            className={part.displayMode ? "math-fragment is-block" : "math-fragment"}
+            dangerouslySetInnerHTML={{
+              __html: katex.renderToString(part.value, {
+                displayMode: part.displayMode,
+                output: "htmlAndMathml",
+                strict: "ignore",
+                throwOnError: false,
+                trust: false,
+              }),
+            }}
+            key={`math-${index}`}
+          />
+        ),
+      )}
+    </span>
+  );
+}
 
 function isUserAddedOutlineNode(node: {
   id: string;
@@ -638,7 +707,7 @@ function HomePage({
   onRequestDelete: (project: LearningProject) => void;
 }) {
   return (
-    <main className="page">
+    <main className="page home-page">
       <section className="page-intro">
         <p>早上好，开启今天的学习之旅吧</p>
         <h1>我的学习项目</h1>
@@ -698,7 +767,7 @@ function HomePage({
 
 function EmptyProjectPage({ title, onCreate }: { title: string; onCreate: () => void }) {
   return (
-    <main className="page">
+    <main className="page empty-state-page">
       <section className="empty-project-card empty-project-card--page">
         <span>＋</span>
         <h1>{title}</h1>
@@ -711,7 +780,7 @@ function EmptyProjectPage({ title, onCreate }: { title: string; onCreate: () => 
 
 function EmptyCourseStructure({ projectTitle }: { projectTitle: string }) {
   return (
-    <main className="page">
+    <main className="page empty-state-page">
       <section className="empty-project-card empty-project-card--page">
         <span>!</span>
         <h1>{projectTitle} 暂无可学习内容</h1>
@@ -740,7 +809,7 @@ function PlanPage({
   const firstTask = activeTasks[0] ?? tasks[0];
 
   return (
-    <main className="page">
+    <main className="page plan-page">
       <section className="page-intro">
         <p>{project.title}</p>
         <h1>今天的学习节奏</h1>
@@ -810,7 +879,7 @@ function ReviewPage({
   const { chapter: currentChapter, section: currentSection } = currentPosition;
 
   return (
-    <main className="page">
+    <main className="page review-page">
       <section className="page-intro">
         <p>{project.title}</p>
         <h1>今天轻松回顾</h1>
@@ -859,7 +928,7 @@ function StatsPage({ projects, activeProject }: { projects: LearningProject[]; a
   const totalMinutes = projects.reduce((sum, project) => sum + project.weeklyMinutes, 0);
 
   return (
-    <main className="page">
+    <main className="page stats-page">
       <section className="page-intro">
         <p>学习足迹</p>
         <h1>本周学习统计</h1>
@@ -1017,7 +1086,7 @@ function CreateProjectPage({
 
   if (step === "preferences") {
     return (
-      <main className="center-page center-page--wide">
+      <main className="center-page center-page--wide create-page preference-page">
         <section className="form-card preference-card">
           <div className="form-head">
             <button
@@ -1084,7 +1153,7 @@ function CreateProjectPage({
   }
 
   return (
-    <main className="center-page">
+    <main className="center-page create-page">
       <section className="form-card">
         <div className="form-head">
           <button className="icon-button" onClick={onCancel} aria-label="返回">←</button>
@@ -1093,7 +1162,13 @@ function CreateProjectPage({
         </div>
         <label>
           课题名称
-          <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：古诗文背诵" />
+          <input
+            name="project-topic"
+            autoComplete="off"
+            value={topic}
+            onChange={(event) => setTopic(event.target.value)}
+            placeholder="例如：古诗文背诵"
+          />
         </label>
         <div className="form-field">
           <div className="field-label-row">
@@ -1119,6 +1194,8 @@ function CreateProjectPage({
           </div>
           <textarea
             id="project-description"
+            name="project-description"
+            autoComplete="off"
             value={description}
             aria-busy={isGeneratingDescription}
             readOnly={isGeneratingDescription}
@@ -1126,7 +1203,7 @@ function CreateProjectPage({
             placeholder={
               topic.trim()
                 ? "可以手动填写，也可以根据课题名称自动补充…"
-                : "例如：每天背诵 3 首，整理意象并记录感悟..."
+                : "例如：每天背诵 3 首，整理意象并记录感悟…"
             }
             rows={5}
           />
@@ -1206,7 +1283,8 @@ function PreferenceQuestion({
       </div>
       {value.selected === "__custom__" ? (
         <input
-          autoFocus
+          aria-label={customPlaceholder}
+          autoComplete="off"
           maxLength={240}
           value={value.custom}
           onChange={(event) => onChange({ custom: event.target.value })}
@@ -1220,7 +1298,7 @@ function PreferenceQuestion({
 function GeneratingPage({ task }: { task?: GenerationTask }) {
   const progress = task?.progress ?? 4;
   return (
-    <main className="center-page">
+    <main className="center-page generating-page">
       <section className="generating-card">
         <div className="orbit-loader"><span /><span /><span /></div>
         <span className="generating-eyebrow">
@@ -2460,7 +2538,11 @@ function ClassroomPage({
   const [isTutorThinking, setIsTutorThinking] = useState(false);
   const [activePhase, setActivePhase] = useState<LearningPhase>("orient");
   const [isCourseMapOpen, setIsCourseMapOpen] = useState(false);
-  const [isCoachOpen, setIsCoachOpen] = useState(true);
+  const [isCoachOpen, setIsCoachOpen] = useState(() =>
+    typeof window === "undefined"
+      ? true
+      : window.matchMedia("(min-width: 1281px)").matches,
+  );
   const [visitedPhases, setVisitedPhases] = useState<LearningPhase[]>(["orient"]);
   const [understandingComplete, setUnderstandingComplete] = useState(false);
   const [practiceResolved, setPracticeResolved] = useState(false);
@@ -2708,9 +2790,30 @@ function ClassroomPage({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setIsCourseMapOpen(false);
     };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
   }, [isCourseMapOpen]);
+
+  useEffect(() => {
+    if (!isCoachOpen || !window.matchMedia("(max-width: 1280px)").matches) {
+      return;
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsCoachOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isCoachOpen]);
 
   async function regenerateLesson() {
     if (isGenerating) return;
@@ -2909,9 +3012,13 @@ function ClassroomPage({
         <div className="classroom-top-primary">
           <button
             className="classroom-map-toggle"
+            aria-label="打开课程地图"
             aria-controls="classroom-course-map"
             aria-expanded={isCourseMapOpen}
-            onClick={() => setIsCourseMapOpen(true)}
+            onClick={() => {
+              setIsCoachOpen(false);
+              setIsCourseMapOpen(true);
+            }}
           >
             <i aria-hidden="true">☰</i>
             <span>课程地图</span>
@@ -2943,11 +3050,23 @@ function ClassroomPage({
           </div>
           <button
             className={`classroom-coach-toggle ${isCoachOpen ? "is-active" : ""}`}
+            aria-label={isCoachOpen ? "收起随堂助教" : "打开随堂助教"}
             aria-controls="classroom-coach"
             aria-expanded={isCoachOpen}
-            onClick={() => setIsCoachOpen((current) => !current)}
+            onClick={() => {
+              setIsCourseMapOpen(false);
+              setIsCoachOpen((current) => !current);
+            }}
           >
-            {isCoachOpen ? "收起助教" : "打开助教"}
+            <span className="classroom-coach-label classroom-coach-label--desktop">
+              {isCoachOpen ? "收起助教" : "打开助教"}
+            </span>
+            <span
+              className="classroom-coach-label classroom-coach-label--mobile"
+              aria-hidden="true"
+            >
+              {isCoachOpen ? "收" : "问"}
+            </span>
           </button>
         </div>
       </section>
@@ -3645,6 +3764,12 @@ function ClassroomPage({
         </section>
 
         {isCoachOpen ? (
+        <>
+        <button
+          className="coach-drawer-backdrop"
+          aria-label="关闭随堂助教"
+          onClick={() => setIsCoachOpen(false)}
+        />
         <aside className="ai-chat ai-coach ai-coach--v3" id="classroom-coach">
           <div className="ai-chat-heading ai-chat-heading--v3">
             <div className="coach-title">
@@ -3747,6 +3872,7 @@ function ClassroomPage({
             </button>
           </div>
         </aside>
+        </>
         ) : null}
       </div>
     </main>
@@ -3938,7 +4064,7 @@ function SettingsPage({
   }
 
   return (
-    <main className="page narrow">
+    <main className="page narrow settings-page">
       <section className="settings-hero settings-hero--refined">
         <button className="icon-button" onClick={onCancel} aria-label="返回">←</button>
         <div className="settings-hero-copy">
@@ -3985,6 +4111,7 @@ function SettingsPage({
             API Key
             <input
               type="password"
+              name="deepseek-api-key"
               autoComplete="off"
               value={draft.apiKey}
               onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
@@ -4000,7 +4127,13 @@ function SettingsPage({
           </label>
           <label>
             服务地址
-            <input value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} />
+            <input
+              type="url"
+              name="deepseek-base-url"
+              autoComplete="off"
+              value={draft.baseUrl}
+              onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })}
+            />
           </label>
           <div className="settings-select-field">
             <span className="settings-field-label">生成模型</span>
@@ -4063,6 +4196,7 @@ function SettingsPage({
             搜索服务密钥
             <input
               type="password"
+              name="tavily-api-key"
               autoComplete="off"
               value={draft.webSearchApiKey}
               onChange={(event) =>
@@ -4741,11 +4875,15 @@ function LessonSceneFlow({
         <header>
           <span>{lessonSceneLabels[scene.type]}</span>
           <small>第 {sceneIndex + 1} 幕</small>
-          <h3>{scene.title}</h3>
-          <p>{scene.instruction}</p>
+          <h3><MathText value={scene.title} /></h3>
+          <p><MathText value={scene.instruction} /></p>
         </header>
 
-        {scene.body ? <div className="lesson-scene-body">{scene.body}</div> : null}
+        {scene.body ? (
+          <div className="lesson-scene-body">
+            <MathText value={scene.body} />
+          </div>
+        ) : null}
 
         {isChoiceScene && scene.options?.length ? (
           <div className="lesson-scene-choice">
@@ -4770,7 +4908,7 @@ function LessonSceneFlow({
                     onClick={() => setSelectedIndex(optionIndex)}
                   >
                     <i>{String.fromCharCode(65 + optionIndex)}</i>
-                    <span>{option}</span>
+                    <span><MathText value={option} /></span>
                   </button>
                 );
               })}
@@ -4782,7 +4920,7 @@ function LessonSceneFlow({
                     {availableHints.slice(0, hintCount).map((hint, index) => (
                       <li key={`${hint}-${index}`}>
                         <span>{index + 1}</span>
-                        <p>{hint}</p>
+                        <p><MathText value={hint} /></p>
                       </li>
                     ))}
                   </ol>
@@ -4811,11 +4949,16 @@ function LessonSceneFlow({
               >
                 <strong>{isCorrect ? "这个判断成立" : "这里容易混淆"}</strong>
                 <p>
-                  {isCorrect
-                    ? scene.feedback?.correct
-                    : attempts < 2
-                      ? `先不公布答案。${availableHints[Math.max(0, hintCount - 1)] ?? "重新对照题目中的判断条件，再试一次。"}`
-                      : scene.feedback?.incorrect}
+                  <MathText
+                    value={
+                      (isCorrect
+                        ? scene.feedback?.correct
+                        : attempts < 2
+                          ? `先不公布答案。${availableHints[Math.max(0, hintCount - 1)] ?? "重新对照题目中的判断条件，再试一次。"}`
+                          : scene.feedback?.incorrect) ??
+                      "重新对照题目中的判断条件，再试一次。"
+                    }
+                  />
                 </p>
                 {!isCorrect ? (
                   <>
@@ -4849,9 +4992,13 @@ function LessonSceneFlow({
                         <small>换个角度</small>
                         <strong>先补上这个缺口</strong>
                         <p>
-                          {scene.remediation ??
-                            scene.feedback?.incorrect ??
-                            "回到题干，把决定答案的条件与刚才选择的理由逐一对照。"}
+                          <MathText
+                            value={
+                              scene.remediation ??
+                              scene.feedback?.incorrect ??
+                              "回到题干，把决定答案的条件与刚才选择的理由逐一对照。"
+                            }
+                          />
                         </p>
                         {!branchAcknowledged ? (
                           <button
@@ -4870,7 +5017,7 @@ function LessonSceneFlow({
                   <section className="lesson-scene-branch is-challenge">
                     <small>想深一层</small>
                     <strong>先用自己的话判断</strong>
-                    <p>{scene.challenge}</p>
+                    <p><MathText value={scene.challenge} /></p>
                     <textarea
                       aria-label="写下你的挑战思路"
                       placeholder="不用写得很长，说清楚判断依据即可…"
@@ -4911,7 +5058,7 @@ function LessonSceneFlow({
               {steps.slice(0, revealedStepCount).map((step, index) => (
                 <li key={`${step}-${index}`}>
                   <span>{index + 1}</span>
-                  <p>{step}</p>
+                  <p><MathText value={step} /></p>
                 </li>
               ))}
             </ol>
@@ -4934,7 +5081,7 @@ function LessonSceneFlow({
           <footer>
             <div>
               <small>这一幕带走什么</small>
-              <strong>{scene.takeaway}</strong>
+              <strong><MathText value={scene.takeaway} /></strong>
             </div>
             {isChoiceScene && isCorrect ? (
               <div className="lesson-route-actions">
@@ -5177,7 +5324,7 @@ function PracticeCard({
             <small>迁移判断</small>
             <span>单选</span>
           </div>
-          <h3>{exercise.question}</h3>
+          <h3><MathText value={exercise.question} /></h3>
         </header>
 
         <div className="practice-options">
@@ -5201,7 +5348,7 @@ function PracticeCard({
                 onClick={() => setSelected(optionIndex)}
               >
                 <i>{String.fromCharCode(65 + optionIndex)}</i>
-                <span>{option}</span>
+                <span><MathText value={option} /></span>
                 <em />
               </button>
             );
@@ -5213,7 +5360,7 @@ function PracticeCard({
             <span>{String(hintCount).padStart(2, "0")}</span>
             <div>
               <small>助教提示</small>
-              <p>{hintText}</p>
+              <p><MathText value={hintText} /></p>
             </div>
           </section>
         ) : null}
@@ -5241,9 +5388,13 @@ function PracticeCard({
                   : "现在对照完整解析"}
             </strong>
             <p>
-              {isCorrect || attempts >= 2
-                ? exercise.explanation
-                : "重新检查题目中的限定词，以及每个选项是否同时满足这些条件。"}
+              <MathText
+                value={
+                  isCorrect || attempts >= 2
+                    ? exercise.explanation
+                    : "重新检查题目中的限定词，以及每个选项是否同时满足这些条件。"
+                }
+              />
             </p>
           </section>
         ) : null}
