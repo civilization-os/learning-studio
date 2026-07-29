@@ -1,0 +1,265 @@
+.course-hub {
+  width: min(1500px, calc(100vw - 48px));
+  padding-bottom: 94px;
+  color: var(--color-text);
+}
+
+.course-hub-hero {
+  gap: 24px 40px;
+  margin-bottom: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 100% 0%, var(--color-canvas-green), transparent 18rem),
+    radial-gradient(circle at 0% 100%, var(--color-canvas-blue), transparent 20rem),
+    var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-2);
+  padding: 22px 26px 26px;
+}
+
+.course-hub-title h1,
+.course-hub-section-head h2 {
+  color: var(--color-text);
+}
+
+.course-hub-title > p,
+.course-hub-section-head p,
+.course-hub-progress small {
+  color: var(--color-text-muted);
+}
+
+.course-hub-title > div small {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+}
+
+.course-outline-edit {
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+}
+
+.course-hub-status {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.course-hub-status > div {
+  min-height: 78px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+  padding: 15px 18px;
+}
+
+.course-hub-status span,
+.course-hub-status small {
+  color: var(--color-text-muted);
+}
+
+.course-hub-layout {
+  grid-template-columns: minmax(0, 1fr) 338px;
+  gap: 16px;
+}
+
+.course-roadmap,
+.course-hub-note,
+.course-hub-sources {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.course-roadmap {
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.course-hub-section-head > strong {
+  color: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.course-roadmap-chapter {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.course-roadmap-chapter.is-current {
+  border-color: color-mix(in srgb, var(--color-accent) 54%, var(--color-border));
+  box-shadow: inset 4px 0 0 var(--color-accent);
+}
+
+.course-roadmap-chapter > summary {
+  color: var(--color-text);
+}
+
+.course-roadmap-chapter > summary p,
+.course-roadmap-chapter > summary small,
+.course-roadmap-meta {
+  color: var(--color-text-muted);
+}
+
+.course-roadmap-index {
+  background: var(--color-feature);
+  color: var(--color-feature-text);
+}
+
+.course-roadmap-sections {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.course-roadmap-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  padding: 12px 14px;
+}
+
+.course-roadmap-tools > div {
+  display: grid;
+  gap: 2px;
+}
+
+.course-roadmap-tools small {
+  color: var(--color-accent);
+  font-size: .66rem;
+  font-weight: 850;
+}
+
+.course-roadmap-tools strong {
+  color: var(--color-text);
+  font-size: .78rem;
+}
+
+.course-roadmap-tools button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  padding: 0 14px;
+  color: var(--color-accent);
+  font-size: .74rem;
+  font-weight: 850;
+}
+
+.course-roadmap-tools button:hover:not(:disabled) {
+  background: var(--color-surface-accent);
+}
+
+.course-roadmap-tools button:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.course-roadmap-section {
+  border: 1px solid transparent;
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.course-roadmap-section:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.course-roadmap-section[aria-current="step"] {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--color-border));
+  background: var(--color-accent-soft);
+}
+
+.course-roadmap-section small,
+.course-roadmap-section p,
+.course-roadmap-section-action {
+  color: var(--color-text-muted);
+}
+
+.course-roadmap-section strong {
+  color: var(--color-text);
+}
+
+.course-roadmap-section-status {
+  background: var(--color-surface);
+  color: var(--color-accent);
+}
+
+.course-roadmap-section[aria-current="step"] .course-roadmap-section-status {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+}
+
+.course-next-card {
+  border: 1px solid color-mix(in srgb, var(--color-feature-text) 12%, transparent);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 100% 100%, rgb(255 255 255 / 6%), transparent 13rem),
+    linear-gradient(145deg, var(--color-feature), var(--color-feature-soft));
+  color: var(--color-feature-text);
+  box-shadow: var(--shadow-2);
+}
+
+.course-next-card h2,
+.course-next-card p,
+.course-next-card small,
+.course-next-card .course-next-label {
+  color: inherit;
+}
+
+.course-next-card p,
+.course-next-card small {
+  color: var(--color-feature-muted);
+}
+
+.course-next-meta span {
+  border-color: rgb(255 255 255 / 14%);
+  background: rgb(255 255 255 / 8%);
+  color: var(--color-feature-text);
+}
+
+.course-next-card .primary-pill {
+  background: var(--color-surface);
+  color: var(--color-accent);
+  box-shadow: 0 8px 22px rgb(3 25 41 / 20%);
+}
+
+.course-next-card .primary-pill:hover:not(:disabled) {
+  background: var(--color-surface-subtle);
+}
+
+.course-hub-note,
+.course-hub-sources {
+  border-radius: var(--radius-lg);
+}
+
+.course-hub-note p,
+.course-hub-sources small {
+  color: var(--color-text-muted);
+}
+
+.course-hub-sources a {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.course-hub-sources a:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}

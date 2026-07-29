@@ -6,6 +6,7 @@ export type GenerationTaskType =
   | "course-outline"
   | "outline-polish"
   | "lesson-content"
+  | "chapter-tool-library"
   | "tutor-reply"
   | "exercise"
   | "agent-run"
@@ -23,6 +24,7 @@ export type GenerationTask = {
   type: GenerationTaskType;
   title: string;
   projectId?: string;
+  chapterId?: string;
   sectionId?: string;
   status: GenerationTaskStatus;
   stage: string;
@@ -70,6 +72,7 @@ export function createGenerationTask(input: {
   type: GenerationTaskType;
   title: string;
   projectId?: string;
+  chapterId?: string;
   sectionId?: string;
 }): GenerationTask {
   const now = new Date().toISOString();
@@ -78,6 +81,7 @@ export function createGenerationTask(input: {
     type: input.type,
     title: input.title.trim().slice(0, 120) || "准备内容",
     ...(input.projectId ? { projectId: input.projectId } : {}),
+    ...(input.chapterId ? { chapterId: input.chapterId } : {}),
     ...(input.sectionId ? { sectionId: input.sectionId } : {}),
     status: "queued",
     stage: "等待开始",

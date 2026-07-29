@@ -19,6 +19,19 @@ type GeneratedLessonContent = {
   overview?: unknown;
   scenes?: unknown;
   learningDesign?: unknown;
+  toolbook?: {
+    title?: unknown;
+    scope?: unknown;
+    completenessNote?: unknown;
+    items?: Array<{
+      title?: unknown;
+      category?: unknown;
+      tier?: unknown;
+      content?: unknown;
+      useWhen?: unknown;
+      boundary?: unknown;
+    }>;
+  };
   mindMap?: {
     center?: unknown;
     branches?: Array<{
@@ -80,6 +93,15 @@ const courseStrategyModes = new Set<CourseStrategyMode>([
   "quick-start",
   "mastery",
 ]);
+const toolbookCategories = new Set([
+  "formula",
+  "rule",
+  "checklist",
+  "command",
+  "template",
+  "reference",
+]);
+const toolbookTiers = new Set(["remember", "lookup"]);
 
 function requireText(value: unknown, field: string, maxLength = 1200): string {
   if (typeof value !== "string" || !value.trim()) {
@@ -500,11 +522,68 @@ function parseLessonContent(
       : {}),
   };
   const overview = requireText(parsed.overview, "本节导语", 500);
+  const rawToolbook = parsed.toolbook;
+  const toolbook: LessonContent["toolbook"] =
+    rawToolbook &&
+    Array.isArray(rawToolbook.items) &&
+    rawToolbook.items.length >= 2 &&
+    rawToolbook.items.length <= 18
+      ? {
+          title: requireText(rawToolbook.title, "工具簿标题", 100),
+          scope: requireText(rawToolbook.scope, "工具簿范围", 260),
+          completenessNote: requireText(
+            rawToolbook.completenessNote,
+            "工具簿完整性说明",
+            320,
+          ),
+          items: rawToolbook.items.map((item, index) => {
+            if (
+              typeof item.category !== "string" ||
+              !toolbookCategories.has(item.category) ||
+              typeof item.tier !== "string" ||
+              !toolbookTiers.has(item.tier)
+            ) {
+              throw new Error(`模型返回的工具簿第 ${index + 1} 项分类无效`);
+            }
+            return {
+              title: requireText(
+                item.title,
+                `工具簿第 ${index + 1} 项标题`,
+                100,
+              ),
+              category: item.category as NonNullable<
+                LessonContent["toolbook"]
+              >["items"][number]["category"],
+              tier: item.tier as NonNullable<
+                LessonContent["toolbook"]
+              >["items"][number]["tier"],
+              content: requireTextList(
+                item.content,
+                `工具簿第 ${index + 1} 项内容`,
+                1,
+                8,
+                260,
+              ),
+              useWhen: requireText(
+                item.useWhen,
+                `工具簿第 ${index + 1} 项用途`,
+                260,
+              ),
+              boundary: requireText(
+                item.boundary,
+                `工具簿第 ${index + 1} 项边界`,
+                320,
+              ),
+            };
+          }),
+        }
+      : undefined;
 
   return {
     generatedAt: new Date().toISOString(),
     modelName,
     learningDesign: parseLearningDesign(parsed.learningDesign),
+    ...(toolbook ? { toolbook } : {}),
     overview,
     scenes: parseLessonScenes(parsed.scenes, explanation, example),
     mindMap: parseMindMap(parsed.mindMap, overview, explanation),

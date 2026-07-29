@@ -1,0 +1,320 @@
+.chapter-tools-backdrop {
+  position: fixed;
+  z-index: 128;
+  inset: 0;
+  visibility: hidden;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  transition:
+    opacity 180ms ease,
+    visibility 180ms ease;
+}
+
+.chapter-tools-backdrop.is-open {
+  visibility: visible;
+  background: var(--overlay-backdrop);
+  opacity: 1;
+  backdrop-filter: blur(4px);
+}
+
+.chapter-tools-drawer {
+  position: fixed;
+  z-index: 130;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(620px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-3);
+  opacity: 0;
+  transform: translateX(calc(100% + 24px));
+  transition:
+    opacity 180ms ease,
+    transform 240ms cubic-bezier(.2, .75, .25, 1);
+}
+
+.chapter-tools-drawer.is-open {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.chapter-tools-drawer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--color-border);
+  background:
+    radial-gradient(circle at 100% 0%, var(--color-canvas-green), transparent 13rem),
+    var(--color-surface-raised);
+  padding: 24px;
+}
+
+.chapter-tools-drawer > header > div {
+  min-width: 0;
+}
+
+.chapter-tools-drawer > header small {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-accent);
+  font-size: .7rem;
+  font-weight: 850;
+}
+
+.chapter-tools-drawer > header span {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: .76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-tools-drawer > header h2 {
+  margin: 5px 0 0;
+  color: var(--color-text);
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  line-height: 1.2;
+}
+
+.chapter-tools-loading {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 36px;
+  text-align: center;
+}
+
+.chapter-tools-loading > span {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: chapter-tools-spin 800ms linear infinite;
+}
+
+.chapter-tools-loading p {
+  max-width: 360px;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: .84rem;
+  line-height: 1.65;
+}
+
+.chapter-tools-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 22px 24px 28px;
+}
+
+.chapter-tools-scope {
+  margin: 0 0 24px;
+  border-left: 3px solid var(--color-accent);
+  background: var(--color-surface-subtle);
+  padding: 14px 16px;
+  color: var(--color-text-muted);
+  font-size: .84rem;
+  line-height: 1.65;
+}
+
+.chapter-tools-group + .chapter-tools-group {
+  margin-top: 26px;
+}
+
+.chapter-tools-group > h3 {
+  margin: 0 0 10px;
+  color: var(--color-text);
+  font-size: .92rem;
+}
+
+.chapter-tools-group > div {
+  display: grid;
+  gap: 8px;
+}
+
+.chapter-tool-item {
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.chapter-tool-item > summary {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 15px 48px 15px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.chapter-tool-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.chapter-tool-item > summary > span {
+  color: var(--color-text);
+  font-size: .88rem;
+  font-weight: 820;
+}
+
+.chapter-tool-item > summary > small {
+  color: var(--color-text-muted);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+
+.chapter-tool-item > summary > i {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  color: var(--color-accent);
+  font-size: 1rem;
+  font-style: normal;
+  transform: translateY(-50%);
+  transition: transform 160ms ease;
+}
+
+.chapter-tool-item[open] > summary > i {
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.chapter-tool-item > div {
+  border-top: 1px solid var(--color-border);
+  padding: 15px 16px 18px;
+}
+
+.chapter-tool-item ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.chapter-tool-item li,
+.chapter-tool-item dd {
+  color: var(--color-text);
+  font-size: .79rem;
+  line-height: 1.65;
+}
+
+.chapter-tool-item dl {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.chapter-tool-item dl > div {
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-subtle);
+  padding: 11px 13px;
+}
+
+.chapter-tool-item dt {
+  margin-bottom: 4px;
+  color: var(--color-accent);
+  font-size: .68rem;
+  font-weight: 850;
+}
+
+.chapter-tool-item dd {
+  margin: 0;
+}
+
+.chapter-tools-sources {
+  margin-top: 24px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+}
+
+.chapter-tools-sources > summary {
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: .76rem;
+  font-weight: 760;
+}
+
+.chapter-tools-sources > div {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.chapter-tools-sources a {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-subtle);
+  padding: 10px 12px;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.chapter-tools-sources a span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: .76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapter-tools-sources a small {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: .65rem;
+}
+
+.chapter-tools-scroll > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 16px;
+  color: var(--color-text-muted);
+  font-size: .72rem;
+}
+
+.chapter-tools-scroll > footer button {
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-subtle);
+  padding: 0 14px;
+  color: var(--color-accent);
+  font-weight: 800;
+}
+
+@keyframes chapter-tools-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 620px) {
+  .chapter-tools-drawer {
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: calc(100vw - 16px);
+    border-radius: 22px;
+  }
+
+  .chapter-tools-drawer > header,
+  .chapter-tools-scroll {
+    padding-right: 17px;
+    padding-left: 17px;
+  }
+}

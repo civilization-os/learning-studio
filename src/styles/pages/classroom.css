@@ -1,0 +1,473 @@
+main.classroom-page {
+  width: min(calc(100% - 32px), 1660px);
+  color: var(--color-text);
+}
+
+.classroom-top.classroom-top--v3 {
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.classroom-breadcrumb span {
+  color: var(--color-text-muted);
+}
+
+.classroom-breadcrumb strong {
+  color: var(--color-accent);
+}
+
+.classroom-layout--v3 .lesson-mission {
+  border-color: var(--color-border);
+  background:
+    radial-gradient(circle at 100% 0%, var(--color-canvas-green), transparent 18rem),
+    radial-gradient(circle at 0% 100%, var(--color-canvas-blue), transparent 20rem),
+    var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-2);
+}
+
+.lesson-mission h1,
+.stage-intro h2,
+.lesson-scene h3,
+.practice-task h3,
+.reflect-teach-back h3 {
+  color: var(--color-text);
+}
+
+.lesson-mission p,
+.stage-intro p {
+  color: var(--color-text-muted);
+}
+
+.lesson-mission-meta > span,
+.lesson-strategy-summary > span,
+.lesson-reference-notes > div {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.classroom-layout--v3 .learning-route {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.learning-route-step {
+  color: var(--color-text-muted);
+}
+
+.learning-route-step.is-active {
+  background: var(--color-action-fill);
+  color: var(--color-action-text);
+}
+
+.learning-route-step.is-visited:not(.is-active) > span:first-child {
+  background: var(--color-success-surface);
+  color: var(--color-success);
+}
+
+.classroom-layout--v3 .learning-stage,
+.lesson-scene,
+.practice-task,
+.practice-brief,
+.lesson-design-brief article,
+.lesson-method-paths,
+.lesson-success-criteria,
+.confidence-check,
+.reflect-teach-back {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.orient-core-card,
+.lesson-scene-rail {
+  background: linear-gradient(150deg, var(--color-feature), var(--color-feature-soft));
+  color: var(--color-feature-text);
+}
+
+.orient-core-card h3,
+.orient-core-card p,
+.lesson-scene-rail h3,
+.lesson-scene-rail p {
+  color: inherit;
+}
+
+.orient-core-card p,
+.lesson-scene-rail p {
+  color: var(--color-feature-muted);
+}
+
+.orient-branches article,
+.lesson-scene-options button,
+.practice-options button,
+.lesson-scene-reveal li > p {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.lesson-design-brief article:first-child {
+  border-color: color-mix(in srgb, var(--color-accent) 38%, var(--color-border));
+  background:
+    radial-gradient(circle at 100% 0%, var(--color-canvas-blue), transparent 9rem),
+    var(--color-surface-muted);
+}
+
+.lesson-design-brief strong,
+.lesson-design-brief li,
+.orient-branches article strong {
+  color: var(--color-text);
+}
+
+.orient-branches li,
+.lesson-method-paths dd,
+.reflect-evidence-list article p,
+.reflect-teach-back footer p {
+  color: var(--color-text-muted);
+}
+
+.orient-branches article header > span {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.orient-branches article:nth-child(2n) header > span {
+  background: var(--color-success-surface);
+  color: var(--color-success);
+}
+
+.orient-branches article:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+  box-shadow: var(--shadow-1);
+}
+
+.orient-handoff {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.orient-handoff strong {
+  color: var(--color-text);
+}
+
+.orient-handoff p {
+  color: var(--color-text-muted);
+}
+
+.stage-primary-action {
+  background: var(--color-action-fill);
+  color: var(--color-action-text);
+}
+
+.stage-primary-action:hover:not(:disabled) {
+  background: var(--color-action-fill-hover);
+  box-shadow: var(--shadow-2);
+}
+
+.lesson-scene-options button:hover,
+.practice-options button:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.lesson-scene-body {
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-soft),
+    color-mix(in srgb, var(--color-accent-soft) 18%, transparent)
+  );
+  color: var(--color-text);
+}
+
+.lesson-method-paths {
+  background:
+    radial-gradient(circle at 100% 0%, var(--color-canvas-blue), transparent 18rem),
+    var(--color-surface-subtle);
+}
+
+.lesson-method-paths article {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.lesson-method-paths h3,
+.lesson-method-paths h4 {
+  color: var(--color-text);
+}
+
+.lesson-method-paths article > span,
+.lesson-method-paths dt {
+  color: var(--color-text-quiet);
+}
+
+.lesson-success-criteria {
+  border-left-color: var(--color-success);
+  background: var(--color-success-surface);
+}
+
+.lesson-success-criteria p {
+  color: var(--color-text-muted);
+}
+
+.lesson-success-criteria i {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: var(--color-success);
+}
+
+.lesson-scene-feedback,
+.practice-feedback {
+  background: var(--color-success-surface);
+  color: var(--color-success);
+}
+
+.lesson-scene-feedback.is-wrong,
+.practice-hint,
+.lesson-scene-hints > ol li,
+.lesson-scene-reveal > p {
+  background: var(--color-warning-surface);
+  color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
+}
+
+.practice-options button.is-correct,
+.lesson-scene-options button.is-correct {
+  border-color: color-mix(in srgb, var(--color-success) 58%, var(--color-border));
+  background: var(--color-success-surface);
+}
+
+.practice-options button.is-wrong,
+.lesson-scene-options button.is-wrong {
+  border-color: color-mix(in srgb, var(--color-danger) 58%, var(--color-border));
+  background: var(--color-danger-surface);
+}
+
+.practice-workbench {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-2);
+}
+
+.practice-task > header > div > small {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.practice-task > header > div > span {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+}
+
+.learning-stage--reflect {
+  background:
+    linear-gradient(135deg, var(--color-canvas-blue), transparent 34%),
+    var(--color-surface);
+}
+
+.reflect-evidence-list article {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.reflect-evidence-list article > span {
+  background: var(--color-surface-muted);
+  color: var(--color-text-quiet);
+}
+
+.reflect-evidence-list article.is-earned {
+  border-color: color-mix(in srgb, var(--color-success) 42%, var(--color-border));
+  background: var(--color-success-surface);
+}
+
+.reflect-evidence-list article.is-earned > span {
+  background: color-mix(in srgb, var(--color-success) 18%, transparent);
+  color: var(--color-success);
+}
+
+.reflect-evidence-list article.is-weak {
+  border-color: color-mix(in srgb, var(--color-warning) 42%, var(--color-border));
+  background: var(--color-warning-surface);
+}
+
+.reflect-evidence-list article.is-weak > span {
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
+}
+
+.reflect-teach-back textarea {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.reflect-feedback {
+  border-left-color: var(--color-success);
+  background: var(--color-success-surface);
+}
+
+.reflect-feedback p {
+  color: var(--color-text-muted);
+}
+
+.confidence-options button {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.confidence-options button:hover:not(.is-selected) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.confidence-options button.is-selected {
+  border-color: var(--color-action-fill);
+  background: var(--color-action-fill);
+  color: var(--color-action-text);
+}
+
+.completion-decision--review {
+  border-color: var(--color-border);
+}
+
+.toolbook-open-button {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.toolbook-open-button:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.lesson-toolbook {
+  border-color: var(--color-border-strong);
+  background:
+    linear-gradient(
+      90deg,
+      transparent 49px,
+      color-mix(in srgb, var(--color-danger) 13%, transparent) 50px,
+      transparent 51px
+    ),
+    repeating-linear-gradient(
+      180deg,
+      var(--color-surface) 0 37px,
+      var(--color-border) 38px,
+      var(--color-surface) 39px
+    );
+  color: var(--color-text);
+}
+
+.toolbook-backdrop {
+  background: var(--overlay-backdrop);
+}
+
+.toolbook-scope,
+.toolbook-item,
+.toolbook-index > span,
+.toolbook-completeness {
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.toolbook-scope p,
+.toolbook-item li,
+.toolbook-item dd,
+.toolbook-completeness p {
+  color: var(--color-text-muted);
+}
+
+.toolbook-item dl {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+}
+
+.toolbook-item dl > div + div {
+  border-color: var(--color-border);
+}
+
+.ai-coach.ai-coach--v3 {
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-2);
+}
+
+.ai-chat-heading--v3 .coach-title h2 {
+  color: var(--color-text);
+}
+
+.ai-coach--v3 .coach-readout {
+  border-color: var(--color-border);
+  background:
+    radial-gradient(circle at 100% 0%, var(--color-canvas-green), transparent 10rem),
+    var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.mastery-ring {
+  background:
+    radial-gradient(circle, var(--color-surface) 0 56%, transparent 58%),
+    conic-gradient(var(--color-accent) var(--mastery), var(--color-border) 0);
+}
+
+.coach-evidence span {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-quiet);
+}
+
+.coach-evidence i {
+  background: var(--color-border-strong);
+}
+
+.coach-evidence span.is-earned {
+  background: var(--color-success-surface);
+  color: var(--color-success);
+}
+
+.coach-evidence span.is-weak {
+  background: var(--color-warning-surface);
+  color: var(--color-warning);
+}
+
+.ai-chat-message--assistant,
+.coach-next-action,
+.coach-progress-card {
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.prompt-chips button {
+  border: 1px solid color-mix(in srgb, var(--color-accent) 20%, var(--color-border));
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.chat-input textarea {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.chat-input button,
+nav.lesson-nav button.is-primary {
+  background: var(--color-action-fill);
+  color: var(--color-action-text);
+}
+
+nav.lesson-nav {
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-2);
+}

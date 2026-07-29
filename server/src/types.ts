@@ -157,6 +157,84 @@ export type LessonProgress = {
   updatedAt: string;
 };
 
+export type LessonToolbookItem = {
+  title: string;
+  category:
+    | "formula"
+    | "rule"
+    | "checklist"
+    | "command"
+    | "template"
+    | "reference";
+  tier: "remember" | "lookup";
+  content: string[];
+  useWhen: string;
+  boundary: string;
+};
+
+export type LessonToolbook = {
+  title: string;
+  scope: string;
+  completenessNote: string;
+  items: LessonToolbookItem[];
+};
+
+export type ChapterToolCategory =
+  | "concept"
+  | "formula"
+  | "method"
+  | "decision"
+  | "procedure"
+  | "checklist"
+  | "pattern"
+  | "reference";
+
+export type ChapterToolPlacement =
+  | "chapter-core"
+  | "chapter-support"
+  | "later-bridge";
+
+export type ChapterToolBasis =
+  | "course-scope"
+  | "reference-structure"
+  | "section-outcome"
+  | "downstream-dependency";
+
+export type ChapterToolItem = {
+  id: string;
+  title: string;
+  category: ChapterToolCategory;
+  placement: ChapterToolPlacement;
+  summary: string;
+  content: string[];
+  useWhen: string;
+  boundary: string;
+  introducedInSectionId?: string;
+  relatedSectionIds: string[];
+  usedInSectionIds: string[];
+  sourceRefs: string[];
+  basis: ChapterToolBasis[];
+};
+
+export type ChapterToolLibrary = {
+  schemaVersion: 1;
+  chapterId: string;
+  title: string;
+  scope: string;
+  generatedAt: string;
+  modelName: string;
+  outlineFingerprint: string;
+  sourceRefs: string[];
+  items: ChapterToolItem[];
+  generation: {
+    webSearchUsed: boolean;
+    researchQueries: string[];
+    coverageAreas: string[];
+    passes: Array<"scope" | "research" | "inventory" | "dependencies" | "review">;
+    warning?: string;
+  };
+};
+
 export type LessonContent = {
   generatedAt: string;
   modelName: string;
@@ -168,6 +246,7 @@ export type LessonContent = {
     warning?: string;
   };
   learningDesign?: LessonLearningDesign;
+  toolbook?: LessonToolbook;
   overview: string;
   scenes?: LessonScene[];
   mindMap: {
@@ -206,6 +285,7 @@ export type CourseChapter = {
   objective?: string;
   prerequisites?: string[];
   estimatedHours?: number;
+  toolLibrary?: ChapterToolLibrary;
 };
 
 export type WebSource = {
@@ -302,6 +382,7 @@ export type AgentName =
   | "project-creator"
   | "outline"
   | "course-content"
+  | "chapter-tool-library"
   | "exercise"
   | "tutor"
   | "learning-planner";

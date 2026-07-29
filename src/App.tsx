@@ -1,10 +1,13 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 import {
   askRemoteTutor,
   completeRemoteSection,
   createRemoteProject,
   deleteRemoteProject,
   generateRemoteLesson,
+  generateRemoteChapterToolLibrary,
   generateRemoteOutline,
   generateRemoteProjectDescription,
   getRemotePreferenceRecommendations,
@@ -26,6 +29,8 @@ import {
 import { useToast } from "./components/ui/toast";
 import {
   CourseChapter,
+  ChapterToolLibrary,
+  ChapterToolPlacement,
   createProjectFromGoal,
   LessonContent,
   LessonKnowledgeState,
@@ -44,6 +49,18 @@ import { loadStudyState, saveStudyState } from "./storage";
 
 type MainView = "home" | "plan" | "review" | "stats";
 type AppView = MainView | "create" | "generating" | "outline" | "detail" | "classroom" | "settings";
+type ThemePreference = "system" | "light" | "dark";
+type ResolvedTheme = "light" | "dark";
+
+const themeStorageKey = "learning-studio-theme";
+
+function readThemePreference(): ThemePreference {
+  if (typeof window === "undefined") return "system";
+  const stored = window.localStorage.getItem(themeStorageKey);
+  return stored === "light" || stored === "dark" || stored === "system"
+    ? stored
+    : "system";
+}
 
 const navItems: Array<{ view: MainView; label: string; icon: string }> = [
   { view: "home", label: "首页", icon: "⌂" },
@@ -68,6 +85,86 @@ const knowledgeRoleLabels = {
   application: "应用",
   verification: "检验",
 };
+const toolbookCategoryLabels = {
+  formula: "公式",
+  rule: "规则",
+  checklist: "检查表",
+  command: "命令",
+  template: "模板",
+  reference: "参照",
+};
+const chapterToolPlacementLabels: Record<ChapterToolPlacement, string> = {
+  "chapter-core": "这一章会掌握",
+  "chapter-support": "学习时可以查",
+  "later-bridge": "后面会用到",
+};
+
+type MathTextPart =
+  | { kind: "text"; value: string }
+  | { displayMode: boolean; kind: "math"; value: string };
+
+function splitMathText(value: string): MathTextPart[] {
+  const parts: MathTextPart[] = [];
+  const pattern = /(\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$\$[\s\S]*?\$\$|\$[^$\n]+?\$)/g;
+  let cursor = 0;
+
+  for (const match of value.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    const raw = match[0];
+    if (index > cursor) {
+      parts.push({ kind: "text", value: value.slice(cursor, index) });
+    }
+
+    const displayMode = raw.startsWith("\\[") || raw.startsWith("$$");
+    const delimiterLength = raw.startsWith("\\") ? 2 : displayMode ? 2 : 1;
+    parts.push({
+      kind: "math",
+      displayMode,
+      value: raw.slice(delimiterLength, -delimiterLength).trim(),
+    });
+    cursor = index + raw.length;
+  }
+
+  if (cursor < value.length) {
+    parts.push({ kind: "text", value: value.slice(cursor) });
+  }
+
+  return parts.length ? parts : [{ kind: "text", value }];
+}
+
+function MathText({
+  value,
+  className = "",
+}: {
+  value: string;
+  className?: string;
+}) {
+  const parts = useMemo(() => splitMathText(value), [value]);
+
+  return (
+    <span className={["math-text", className].filter(Boolean).join(" ")}>
+      {parts.map((part, index) =>
+        part.kind === "text" ? (
+          <span key={`text-${index}`}>{part.value}</span>
+        ) : (
+          <span
+            className={part.displayMode ? "math-fragment is-block" : "math-fragment"}
+            dangerouslySetInnerHTML={{
+              __html: katex.renderToString(part.value, {
+                displayMode: part.displayMode,
+                output: "htmlAndMathml",
+                strict: "ignore",
+                throwOnError: false,
+                trust: false,
+              }),
+            }}
+            key={`math-${index}`}
+          />
+        ),
+      )}
+    </span>
+  );
+}
 
 function isUserAddedOutlineNode(node: {
   id: string;
@@ -99,6 +196,13 @@ function getSourceHost(url: string) {
 export default function App() {
   const { notify } = useToast();
   const [state, setState] = useState<StudyState>(() => loadStudyState());
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>(readThemePreference);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
+    typeof window === "undefined"
+      ? false
+      : window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
   const [generationTasks, setGenerationTasks] = useState<GenerationTask[]>([]);
   const [view, setView] = useState<AppView>("home");
   const [draftProject, setDraftProject] = useState<LearningProject | null>(null);
@@ -112,6 +216,32 @@ export default function App() {
   useEffect(() => {
     saveStudyState(state);
   }, [state]);
+
+  const resolvedTheme: ResolvedTheme =
+    themePreference === "system"
+      ? systemPrefersDark
+        ? "dark"
+        : "light"
+      : themePreference;
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateSystemTheme = (event: MediaQueryListEvent) => {
+      setSystemPrefersDark(event.matches);
+    };
+    setSystemPrefersDark(media.matches);
+    media.addEventListener("change", updateSystemTheme);
+    return () => media.removeEventListener("change", updateSystemTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
+    window.localStorage.setItem(themeStorageKey, themePreference);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", resolvedTheme === "dark" ? "#0b151f" : "#f4f7fa");
+  }, [resolvedTheme, themePreference]);
 
   useEffect(() => subscribeGenerationTasks(setGenerationTasks), []);
 
@@ -396,6 +526,9 @@ export default function App() {
         tasks={generationTasks}
         onHome={() => go("home")}
         onSettings={() => go("settings")}
+        resolvedTheme={resolvedTheme}
+        themePreference={themePreference}
+        onThemeChange={setThemePreference}
       />
 
       {view === "home" && (
@@ -429,6 +562,7 @@ export default function App() {
           project={activeProject}
           onOpenSection={openSection}
           onEditOutline={editProjectOutline}
+          onProjectUpdate={updateProject}
           onBack={() => go("home")}
         />
       )}
@@ -532,10 +666,16 @@ function GlobalTopBar({
   tasks,
   onHome,
   onSettings,
+  resolvedTheme,
+  themePreference,
+  onThemeChange,
 }: {
   tasks: GenerationTask[];
   onHome: () => void;
   onSettings: () => void;
+  resolvedTheme: ResolvedTheme;
+  themePreference: ThemePreference;
+  onThemeChange: (theme: ThemePreference) => void;
 }) {
   const visibleTasks = tasks.slice(0, 8);
   const activeTasks = tasks.filter(
@@ -620,9 +760,75 @@ function GlobalTopBar({
       </details>
       <div className="bar-actions">
         <button className="icon-button" onClick={onSettings} aria-label="设置">⚙</button>
-        <button className="icon-button" aria-label="主题">◐</button>
+        <ThemeControl
+          onChange={onThemeChange}
+          preference={themePreference}
+          resolvedTheme={resolvedTheme}
+        />
       </div>
     </header>
+  );
+}
+
+function ThemeControl({
+  onChange,
+  preference,
+  resolvedTheme,
+}: {
+  onChange: (theme: ThemePreference) => void;
+  preference: ThemePreference;
+  resolvedTheme: ResolvedTheme;
+}) {
+  const labels: Record<ThemePreference, string> = {
+    system: "跟随系统",
+    light: "浅色",
+    dark: "深色",
+  };
+  const icons: Record<ThemePreference, string> = {
+    system: "◐",
+    light: "☼",
+    dark: "☾",
+  };
+
+  return (
+    <details className="theme-control">
+      <summary
+        className="icon-button"
+        aria-label={`主题：${labels[preference]}，当前为${resolvedTheme === "dark" ? "深色" : "浅色"}`}
+        title={`主题：${labels[preference]}`}
+      >
+        {icons[preference]}
+      </summary>
+      <div className="theme-menu">
+        <header>
+          <span>阅读主题</span>
+          <small>当前为{resolvedTheme === "dark" ? "深色" : "浅色"}</small>
+        </header>
+        {(["system", "light", "dark"] as ThemePreference[]).map((theme) => (
+          <button
+            className={preference === theme ? "is-active" : ""}
+            key={theme}
+            onClick={(event) => {
+              onChange(theme);
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}
+          >
+            <i aria-hidden="true">{icons[theme]}</i>
+            <span>
+              <strong>{labels[theme]}</strong>
+              <small>
+                {theme === "system"
+                  ? "随设备明暗自动变化"
+                  : theme === "light"
+                    ? "明亮、清晰的学习桌面"
+                    : "低亮度的专注阅读环境"}
+              </small>
+            </span>
+            <em aria-hidden="true">{preference === theme ? "✓" : ""}</em>
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -638,7 +844,7 @@ function HomePage({
   onRequestDelete: (project: LearningProject) => void;
 }) {
   return (
-    <main className="page">
+    <main className="page home-page">
       <section className="page-intro">
         <p>早上好，开启今天的学习之旅吧</p>
         <h1>我的学习项目</h1>
@@ -698,7 +904,7 @@ function HomePage({
 
 function EmptyProjectPage({ title, onCreate }: { title: string; onCreate: () => void }) {
   return (
-    <main className="page">
+    <main className="page empty-state-page">
       <section className="empty-project-card empty-project-card--page">
         <span>＋</span>
         <h1>{title}</h1>
@@ -711,7 +917,7 @@ function EmptyProjectPage({ title, onCreate }: { title: string; onCreate: () => 
 
 function EmptyCourseStructure({ projectTitle }: { projectTitle: string }) {
   return (
-    <main className="page">
+    <main className="page empty-state-page">
       <section className="empty-project-card empty-project-card--page">
         <span>!</span>
         <h1>{projectTitle} 暂无可学习内容</h1>
@@ -740,7 +946,7 @@ function PlanPage({
   const firstTask = activeTasks[0] ?? tasks[0];
 
   return (
-    <main className="page">
+    <main className="page plan-page">
       <section className="page-intro">
         <p>{project.title}</p>
         <h1>今天的学习节奏</h1>
@@ -810,7 +1016,7 @@ function ReviewPage({
   const { chapter: currentChapter, section: currentSection } = currentPosition;
 
   return (
-    <main className="page">
+    <main className="page review-page">
       <section className="page-intro">
         <p>{project.title}</p>
         <h1>今天轻松回顾</h1>
@@ -859,7 +1065,7 @@ function StatsPage({ projects, activeProject }: { projects: LearningProject[]; a
   const totalMinutes = projects.reduce((sum, project) => sum + project.weeklyMinutes, 0);
 
   return (
-    <main className="page">
+    <main className="page stats-page">
       <section className="page-intro">
         <p>学习足迹</p>
         <h1>本周学习统计</h1>
@@ -1017,7 +1223,7 @@ function CreateProjectPage({
 
   if (step === "preferences") {
     return (
-      <main className="center-page center-page--wide">
+      <main className="center-page center-page--wide create-page preference-page">
         <section className="form-card preference-card">
           <div className="form-head">
             <button
@@ -1084,7 +1290,7 @@ function CreateProjectPage({
   }
 
   return (
-    <main className="center-page">
+    <main className="center-page create-page">
       <section className="form-card">
         <div className="form-head">
           <button className="icon-button" onClick={onCancel} aria-label="返回">←</button>
@@ -1093,7 +1299,13 @@ function CreateProjectPage({
         </div>
         <label>
           课题名称
-          <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：古诗文背诵" />
+          <input
+            name="project-topic"
+            autoComplete="off"
+            value={topic}
+            onChange={(event) => setTopic(event.target.value)}
+            placeholder="例如：古诗文背诵"
+          />
         </label>
         <div className="form-field">
           <div className="field-label-row">
@@ -1119,6 +1331,8 @@ function CreateProjectPage({
           </div>
           <textarea
             id="project-description"
+            name="project-description"
+            autoComplete="off"
             value={description}
             aria-busy={isGeneratingDescription}
             readOnly={isGeneratingDescription}
@@ -1126,7 +1340,7 @@ function CreateProjectPage({
             placeholder={
               topic.trim()
                 ? "可以手动填写，也可以根据课题名称自动补充…"
-                : "例如：每天背诵 3 首，整理意象并记录感悟..."
+                : "例如：每天背诵 3 首，整理意象并记录感悟…"
             }
             rows={5}
           />
@@ -1206,7 +1420,8 @@ function PreferenceQuestion({
       </div>
       {value.selected === "__custom__" ? (
         <input
-          autoFocus
+          aria-label={customPlaceholder}
+          autoComplete="off"
           maxLength={240}
           value={value.custom}
           onChange={(event) => onChange({ custom: event.target.value })}
@@ -1220,7 +1435,7 @@ function PreferenceQuestion({
 function GeneratingPage({ task }: { task?: GenerationTask }) {
   const progress = task?.progress ?? 4;
   return (
-    <main className="center-page">
+    <main className="center-page generating-page">
       <section className="generating-card">
         <div className="orbit-loader"><span /><span /><span /></div>
         <span className="generating-eyebrow">
@@ -2063,13 +2278,16 @@ function CourseDetailPage({
   project,
   onOpenSection,
   onEditOutline,
+  onProjectUpdate,
   onBack,
 }: {
   project: LearningProject;
   onOpenSection: (project: LearningProject, chapterId: string, sectionId: string) => void;
   onEditOutline: (project: LearningProject) => void;
+  onProjectUpdate: (project: LearningProject) => void;
   onBack: () => void;
 }) {
+  const { notify } = useToast();
   const currentPosition = getFirstCoursePosition(project);
   const totalSections = project.chapters.reduce(
     (count, chapter) => count + chapter.sections.length,
@@ -2109,8 +2327,53 @@ function CourseDetailPage({
         ? [project.chapters[0].id]
         : [];
   });
+  const [toolLibraryChapterId, setToolLibraryChapterId] = useState("");
+  const [toolLibraryLoadingChapterId, setToolLibraryLoadingChapterId] =
+    useState("");
+  const selectedToolChapter = project.chapters.find(
+    (chapter) => chapter.id === toolLibraryChapterId,
+  );
+
+  async function openChapterToolLibrary(
+    chapter: CourseChapter,
+    force = false,
+  ) {
+    if (chapter.toolLibrary && !force) {
+      setToolLibraryChapterId(chapter.id);
+      return;
+    }
+    if (toolLibraryLoadingChapterId) return;
+    setToolLibraryChapterId(chapter.id);
+    setToolLibraryLoadingChapterId(chapter.id);
+    try {
+      const result = await generateRemoteChapterToolLibrary(
+        project.id,
+        chapter.id,
+        force,
+      );
+      onProjectUpdate(result.project);
+      setToolLibraryChapterId(chapter.id);
+      if (result.warning) {
+        notify({
+          variant: "warning",
+          title: "本章工具已整理，部分资料未取得",
+          description: result.warning,
+        });
+      }
+    } catch (error) {
+      setToolLibraryChapterId("");
+      notify({
+        variant: "error",
+        title: "本章工具没有整理完成",
+        description: getErrorMessage(error),
+      });
+    } finally {
+      setToolLibraryLoadingChapterId("");
+    }
+  }
 
   return (
+    <>
     <main className="page course-hub">
       <header className="course-hub-hero">
         <div className="course-hub-nav">
@@ -2258,6 +2521,27 @@ function CourseDetailPage({
                   </summary>
 
                   <div className="course-roadmap-sections">
+                    <div className="course-roadmap-tools">
+                      <div>
+                        <small>本章工具</small>
+                        <strong>
+                          {chapter.toolLibrary
+                            ? "随时查公式、方法和使用边界"
+                            : "先根据整门课程和参考资料整理"}
+                        </strong>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={Boolean(toolLibraryLoadingChapterId)}
+                        onClick={() => openChapterToolLibrary(chapter)}
+                      >
+                        {toolLibraryLoadingChapterId === chapter.id
+                          ? "正在整理…"
+                          : chapter.toolLibrary
+                            ? "打开"
+                            : "开始整理"}
+                      </button>
+                    </div>
                     {chapter.sections.map((section, sectionIndex) => (
                       <button
                         type="button"
@@ -2416,6 +2700,316 @@ function CourseDetailPage({
         </aside>
       </div>
     </main>
+    <ChapterToolLibraryDrawer
+      chapterTitle={selectedToolChapter?.title ?? ""}
+      isLoading={
+        Boolean(toolLibraryChapterId) &&
+        toolLibraryLoadingChapterId === toolLibraryChapterId
+      }
+      isOpen={Boolean(toolLibraryChapterId)}
+      library={selectedToolChapter?.toolLibrary}
+      projectSources={project.sources ?? []}
+      onClose={() => setToolLibraryChapterId("")}
+      onRefresh={
+        selectedToolChapter
+          ? () => openChapterToolLibrary(selectedToolChapter, true)
+          : undefined
+      }
+    />
+    </>
+  );
+}
+
+function ChapterToolLibraryDrawer({
+  chapterTitle,
+  currentSectionId,
+  isLoading,
+  isOpen,
+  library,
+  projectSources,
+  onClose,
+  onRefresh,
+}: {
+  chapterTitle: string;
+  currentSectionId?: string;
+  isLoading: boolean;
+  isOpen: boolean;
+  library?: ChapterToolLibrary;
+  projectSources: LearningProject["sources"];
+  onClose: () => void;
+  onRefresh?: () => void;
+}) {
+  const sourceByUrl = new Map(
+    (projectSources ?? []).map((source) => [source.url, source]),
+  );
+  const currentItems =
+    library?.items.filter(
+      (item) =>
+        currentSectionId &&
+        (item.introducedInSectionId === currentSectionId ||
+          item.relatedSectionIds.includes(currentSectionId)),
+    ) ?? [];
+  const currentItemIds = new Set(currentItems.map((item) => item.id));
+  const displayGroups = currentSectionId
+    ? [
+        { id: "current", label: "本节正在用", items: currentItems },
+        {
+          id: "chapter",
+          label: "本章可以查",
+          items:
+            library?.items.filter(
+              (item) =>
+                item.placement !== "later-bridge" &&
+                !currentItemIds.has(item.id),
+            ) ?? [],
+        },
+        {
+          id: "later",
+          label: "后面会用到",
+          items:
+            library?.items.filter(
+              (item) => item.placement === "later-bridge",
+            ) ?? [],
+        },
+      ]
+    : (
+        [
+          "chapter-core",
+          "chapter-support",
+          "later-bridge",
+        ] as ChapterToolPlacement[]
+      ).map((placement) => ({
+        id: placement,
+        label: chapterToolPlacementLabels[placement],
+        items:
+          library?.items.filter((item) => item.placement === placement) ?? [],
+      }));
+
+  return (
+    <>
+      <button
+        className={`chapter-tools-backdrop ${isOpen ? "is-open" : ""}`}
+        aria-label="关闭本章工具"
+        tabIndex={isOpen ? 0 : -1}
+        onClick={onClose}
+      />
+      <aside
+        className={`chapter-tools-drawer ${isOpen ? "is-open" : ""}`}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
+      >
+        <header>
+          <div>
+            <small>本章工具</small>
+            <span>{chapterTitle}</span>
+            <h2>{library?.title ?? "正在整理…"}</h2>
+          </div>
+          <button className="icon-button" aria-label="关闭本章工具" onClick={onClose}>
+            ×
+          </button>
+        </header>
+
+        {isLoading || !library ? (
+          <div className="chapter-tools-loading">
+            <span aria-hidden="true" />
+            <strong>正在整理本章会反复用到的内容</strong>
+            <p>会检查课程位置、参考资料和后面的课堂，不需要停留在这里等待。</p>
+          </div>
+        ) : (
+          <div className="chapter-tools-scroll">
+            <p className="chapter-tools-scope">{library.scope}</p>
+            {displayGroups.map((group) => {
+              if (!group.items.length) return null;
+              return (
+                <section className="chapter-tools-group" key={group.id}>
+                  <h3>{group.label}</h3>
+                  <div>
+                    {group.items.map((item) => (
+                      <details className="chapter-tool-item" key={item.id}>
+                        <summary>
+                          <span>{item.title}</span>
+                          <small>{item.summary}</small>
+                          <i aria-hidden="true">＋</i>
+                        </summary>
+                        <div>
+                          <ul>
+                            {item.content.map((content, index) => (
+                              <li key={`${item.id}-content-${index}`}>
+                                <MathText value={content} />
+                              </li>
+                            ))}
+                          </ul>
+                          <dl>
+                            <div>
+                              <dt>什么时候用</dt>
+                              <dd><MathText value={item.useWhen} /></dd>
+                            </div>
+                            <div>
+                              <dt>注意什么</dt>
+                              <dd><MathText value={item.boundary} /></dd>
+                            </div>
+                          </dl>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+
+            {library.sourceRefs.length ? (
+              <details className="chapter-tools-sources">
+                <summary>整理时参考了什么</summary>
+                <div>
+                  {library.sourceRefs.flatMap((url) => {
+                    const source = sourceByUrl.get(url);
+                    return source
+                      ? [
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            key={source.url}
+                          >
+                            <span>{source.title}</span>
+                            <small>{getSourceHost(source.url)} ↗</small>
+                          </a>,
+                        ]
+                      : [];
+                  })}
+                </div>
+              </details>
+            ) : null}
+            <footer>
+              <span>
+                {library.generation.webSearchUsed
+                  ? "已结合外部资料整理"
+                  : "按课程内容整理"}
+              </span>
+              {onRefresh ? (
+                <button type="button" onClick={onRefresh}>
+                  重新整理
+                </button>
+              ) : null}
+            </footer>
+          </div>
+        )}
+      </aside>
+    </>
+  );
+}
+
+function LessonToolbookDrawer({
+  isOpen,
+  onClose,
+  sectionTitle,
+  toolbook,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  sectionTitle: string;
+  toolbook: NonNullable<LessonContent["toolbook"]>;
+}) {
+  const rememberCount = toolbook.items.filter(
+    (item) => item.tier === "remember",
+  ).length;
+
+  return (
+    <>
+      <button
+        className={`toolbook-backdrop ${isOpen ? "is-open" : ""}`}
+        aria-label="关闭本节工具簿"
+        tabIndex={isOpen ? 0 : -1}
+        onClick={onClose}
+      />
+      <aside
+        className={`lesson-toolbook ${isOpen ? "is-open" : ""}`}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
+      >
+        <header className="toolbook-header">
+          <div>
+            <span>SECTION FIELD NOTES</span>
+            <small>{sectionTitle}</small>
+            <h2>{toolbook.title}</h2>
+          </div>
+          <button
+            className="icon-button"
+            aria-label="关闭本节工具簿"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="toolbook-scroll">
+          <section className="toolbook-scope">
+            <div>
+              <span>{String(toolbook.items.length).padStart(2, "0")}</span>
+              <small>项可查工具</small>
+            </div>
+            <p>{toolbook.scope}</p>
+          </section>
+
+          <div className="toolbook-index" aria-label="工具簿分类">
+            <span>
+              <strong>{rememberCount}</strong>
+              必须记住
+            </span>
+            <span>
+              <strong>{toolbook.items.length - rememberCount}</strong>
+              用时查阅
+            </span>
+          </div>
+
+          <div className="toolbook-list">
+            {toolbook.items.map((item, index) => (
+              <article
+                className={`toolbook-item toolbook-item--${item.tier}`}
+                key={`${item.title}-${index}`}
+              >
+                <header>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <small>
+                      {toolbookCategoryLabels[item.category]} ·{" "}
+                      {item.tier === "remember" ? "必须记住" : "用时查阅"}
+                    </small>
+                    <h3>{item.title}</h3>
+                  </div>
+                </header>
+                <ul>
+                  {item.content.map((entry, entryIndex) => (
+                    <li key={`${entry}-${entryIndex}`}>
+                      <MathText value={entry} />
+                    </li>
+                  ))}
+                </ul>
+                <dl>
+                  <div>
+                    <dt>什么时候用</dt>
+                    <dd>
+                      <MathText value={item.useWhen} />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>边界</dt>
+                    <dd>
+                      <MathText value={item.boundary} />
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+
+          <footer className="toolbook-completeness">
+            <span>这份工具簿覆盖到哪里</span>
+            <p>{toolbook.completenessNote}</p>
+          </footer>
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -2460,7 +3054,13 @@ function ClassroomPage({
   const [isTutorThinking, setIsTutorThinking] = useState(false);
   const [activePhase, setActivePhase] = useState<LearningPhase>("orient");
   const [isCourseMapOpen, setIsCourseMapOpen] = useState(false);
-  const [isCoachOpen, setIsCoachOpen] = useState(true);
+  const [isToolbookOpen, setIsToolbookOpen] = useState(false);
+  const [isChapterToolsLoading, setIsChapterToolsLoading] = useState(false);
+  const [isCoachOpen, setIsCoachOpen] = useState(() =>
+    typeof window === "undefined"
+      ? true
+      : window.matchMedia("(min-width: 1281px)").matches,
+  );
   const [visitedPhases, setVisitedPhases] = useState<LearningPhase[]>(["orient"]);
   const [understandingComplete, setUnderstandingComplete] = useState(false);
   const [practiceResolved, setPracticeResolved] = useState(false);
@@ -2637,6 +3237,7 @@ function ClassroomPage({
     setTutorInput("");
     setActivePhase("orient");
     setVisitedPhases(["orient"]);
+    setIsToolbookOpen(false);
     setUnderstandingComplete(false);
     setProgressSaveState("idle");
     setPracticeResult("idle");
@@ -2708,9 +3309,44 @@ function ClassroomPage({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setIsCourseMapOpen(false);
     };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
   }, [isCourseMapOpen]);
+
+  useEffect(() => {
+    if (!isToolbookOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsToolbookOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isToolbookOpen]);
+
+  useEffect(() => {
+    if (!isCoachOpen || !window.matchMedia("(max-width: 1280px)").matches) {
+      return;
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsCoachOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isCoachOpen]);
 
   async function regenerateLesson() {
     if (isGenerating) return;
@@ -2738,6 +3374,37 @@ function ClassroomPage({
       });
     } finally {
       if (lessonRequestId.current === requestId) setIsGenerating(false);
+    }
+  }
+
+  async function openChapterTools() {
+    setIsCoachOpen(false);
+    setIsCourseMapOpen(false);
+    setIsToolbookOpen(true);
+    if (chapter.toolLibrary || isChapterToolsLoading) return;
+    setIsChapterToolsLoading(true);
+    try {
+      const result = await generateRemoteChapterToolLibrary(
+        project.id,
+        chapter.id,
+      );
+      onProjectUpdate(result.project);
+      if (result.warning) {
+        notify({
+          variant: "warning",
+          title: "本章工具已整理，部分资料未取得",
+          description: result.warning,
+        });
+      }
+    } catch (error) {
+      setIsToolbookOpen(false);
+      notify({
+        variant: "error",
+        title: "本章工具没有整理完成",
+        description: getErrorMessage(error),
+      });
+    } finally {
+      setIsChapterToolsLoading(false);
     }
   }
 
@@ -2909,9 +3576,13 @@ function ClassroomPage({
         <div className="classroom-top-primary">
           <button
             className="classroom-map-toggle"
+            aria-label="打开课程地图"
             aria-controls="classroom-course-map"
             aria-expanded={isCourseMapOpen}
-            onClick={() => setIsCourseMapOpen(true)}
+            onClick={() => {
+              setIsCoachOpen(false);
+              setIsCourseMapOpen(true);
+            }}
           >
             <i aria-hidden="true">☰</i>
             <span>课程地图</span>
@@ -2943,11 +3614,23 @@ function ClassroomPage({
           </div>
           <button
             className={`classroom-coach-toggle ${isCoachOpen ? "is-active" : ""}`}
+            aria-label={isCoachOpen ? "收起随堂助教" : "打开随堂助教"}
             aria-controls="classroom-coach"
             aria-expanded={isCoachOpen}
-            onClick={() => setIsCoachOpen((current) => !current)}
+            onClick={() => {
+              setIsCourseMapOpen(false);
+              setIsCoachOpen((current) => !current);
+            }}
           >
-            {isCoachOpen ? "收起助教" : "打开助教"}
+            <span className="classroom-coach-label classroom-coach-label--desktop">
+              {isCoachOpen ? "收起助教" : "打开助教"}
+            </span>
+            <span
+              className="classroom-coach-label classroom-coach-label--mobile"
+              aria-hidden="true"
+            >
+              {isCoachOpen ? "收" : "问"}
+            </span>
           </button>
         </div>
       </section>
@@ -2998,6 +3681,36 @@ function ClassroomPage({
           />
         </div>
       </aside>
+
+      <ChapterToolLibraryDrawer
+        chapterTitle={chapter.title}
+        currentSectionId={section.id}
+        isLoading={isChapterToolsLoading}
+        isOpen={isToolbookOpen}
+        library={chapter.toolLibrary}
+        projectSources={project.sources ?? []}
+        onClose={() => setIsToolbookOpen(false)}
+        onRefresh={async () => {
+          if (isChapterToolsLoading) return;
+          setIsChapterToolsLoading(true);
+          try {
+            const result = await generateRemoteChapterToolLibrary(
+              project.id,
+              chapter.id,
+              true,
+            );
+            onProjectUpdate(result.project);
+          } catch (error) {
+            notify({
+              variant: "error",
+              title: "这次没有重新整理成功",
+              description: getErrorMessage(error),
+            });
+          } finally {
+            setIsChapterToolsLoading(false);
+          }
+        }}
+      />
 
       <div
         className={`classroom-layout classroom-layout--v3 ${isCoachOpen ? "" : "is-coach-closed"}`}
@@ -3067,6 +3780,23 @@ function ClassroomPage({
                   <strong>{phaseProgress}%</strong>
                 </span>
               </div>
+              <button
+                className={`toolbook-open-button ${chapter.toolLibrary ? "" : "is-pending"}`}
+                disabled={isChapterToolsLoading}
+                onClick={openChapterTools}
+              >
+                <span>本章工具</span>
+                <strong>
+                  {isChapterToolsLoading
+                    ? "正在整理"
+                    : chapter.toolLibrary
+                      ? "按本节筛选"
+                      : "需要时整理"}
+                </strong>
+                <i aria-hidden="true">
+                  {chapter.toolLibrary ? "↗" : "＋"}
+                </i>
+              </button>
               <button
                 className="soft-pill"
                 disabled={isGenerating}
@@ -3645,6 +4375,12 @@ function ClassroomPage({
         </section>
 
         {isCoachOpen ? (
+        <>
+        <button
+          className="coach-drawer-backdrop"
+          aria-label="关闭随堂助教"
+          onClick={() => setIsCoachOpen(false)}
+        />
         <aside className="ai-chat ai-coach ai-coach--v3" id="classroom-coach">
           <div className="ai-chat-heading ai-chat-heading--v3">
             <div className="coach-title">
@@ -3747,6 +4483,7 @@ function ClassroomPage({
             </button>
           </div>
         </aside>
+        </>
         ) : null}
       </div>
     </main>
@@ -3938,7 +4675,7 @@ function SettingsPage({
   }
 
   return (
-    <main className="page narrow">
+    <main className="page narrow settings-page">
       <section className="settings-hero settings-hero--refined">
         <button className="icon-button" onClick={onCancel} aria-label="返回">←</button>
         <div className="settings-hero-copy">
@@ -3985,6 +4722,7 @@ function SettingsPage({
             API Key
             <input
               type="password"
+              name="deepseek-api-key"
               autoComplete="off"
               value={draft.apiKey}
               onChange={(event) => setDraft({ ...draft, apiKey: event.target.value })}
@@ -4000,7 +4738,13 @@ function SettingsPage({
           </label>
           <label>
             服务地址
-            <input value={draft.baseUrl} onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })} />
+            <input
+              type="url"
+              name="deepseek-base-url"
+              autoComplete="off"
+              value={draft.baseUrl}
+              onChange={(event) => setDraft({ ...draft, baseUrl: event.target.value })}
+            />
           </label>
           <div className="settings-select-field">
             <span className="settings-field-label">生成模型</span>
@@ -4063,6 +4807,7 @@ function SettingsPage({
             搜索服务密钥
             <input
               type="password"
+              name="tavily-api-key"
               autoComplete="off"
               value={draft.webSearchApiKey}
               onChange={(event) =>
@@ -4741,11 +5486,15 @@ function LessonSceneFlow({
         <header>
           <span>{lessonSceneLabels[scene.type]}</span>
           <small>第 {sceneIndex + 1} 幕</small>
-          <h3>{scene.title}</h3>
-          <p>{scene.instruction}</p>
+          <h3><MathText value={scene.title} /></h3>
+          <p><MathText value={scene.instruction} /></p>
         </header>
 
-        {scene.body ? <div className="lesson-scene-body">{scene.body}</div> : null}
+        {scene.body ? (
+          <div className="lesson-scene-body">
+            <MathText value={scene.body} />
+          </div>
+        ) : null}
 
         {isChoiceScene && scene.options?.length ? (
           <div className="lesson-scene-choice">
@@ -4770,7 +5519,7 @@ function LessonSceneFlow({
                     onClick={() => setSelectedIndex(optionIndex)}
                   >
                     <i>{String.fromCharCode(65 + optionIndex)}</i>
-                    <span>{option}</span>
+                    <span><MathText value={option} /></span>
                   </button>
                 );
               })}
@@ -4782,7 +5531,7 @@ function LessonSceneFlow({
                     {availableHints.slice(0, hintCount).map((hint, index) => (
                       <li key={`${hint}-${index}`}>
                         <span>{index + 1}</span>
-                        <p>{hint}</p>
+                        <p><MathText value={hint} /></p>
                       </li>
                     ))}
                   </ol>
@@ -4811,11 +5560,16 @@ function LessonSceneFlow({
               >
                 <strong>{isCorrect ? "这个判断成立" : "这里容易混淆"}</strong>
                 <p>
-                  {isCorrect
-                    ? scene.feedback?.correct
-                    : attempts < 2
-                      ? `先不公布答案。${availableHints[Math.max(0, hintCount - 1)] ?? "重新对照题目中的判断条件，再试一次。"}`
-                      : scene.feedback?.incorrect}
+                  <MathText
+                    value={
+                      (isCorrect
+                        ? scene.feedback?.correct
+                        : attempts < 2
+                          ? `先不公布答案。${availableHints[Math.max(0, hintCount - 1)] ?? "重新对照题目中的判断条件，再试一次。"}`
+                          : scene.feedback?.incorrect) ??
+                      "重新对照题目中的判断条件，再试一次。"
+                    }
+                  />
                 </p>
                 {!isCorrect ? (
                   <>
@@ -4849,9 +5603,13 @@ function LessonSceneFlow({
                         <small>换个角度</small>
                         <strong>先补上这个缺口</strong>
                         <p>
-                          {scene.remediation ??
-                            scene.feedback?.incorrect ??
-                            "回到题干，把决定答案的条件与刚才选择的理由逐一对照。"}
+                          <MathText
+                            value={
+                              scene.remediation ??
+                              scene.feedback?.incorrect ??
+                              "回到题干，把决定答案的条件与刚才选择的理由逐一对照。"
+                            }
+                          />
                         </p>
                         {!branchAcknowledged ? (
                           <button
@@ -4870,7 +5628,7 @@ function LessonSceneFlow({
                   <section className="lesson-scene-branch is-challenge">
                     <small>想深一层</small>
                     <strong>先用自己的话判断</strong>
-                    <p>{scene.challenge}</p>
+                    <p><MathText value={scene.challenge} /></p>
                     <textarea
                       aria-label="写下你的挑战思路"
                       placeholder="不用写得很长，说清楚判断依据即可…"
@@ -4911,7 +5669,7 @@ function LessonSceneFlow({
               {steps.slice(0, revealedStepCount).map((step, index) => (
                 <li key={`${step}-${index}`}>
                   <span>{index + 1}</span>
-                  <p>{step}</p>
+                  <p><MathText value={step} /></p>
                 </li>
               ))}
             </ol>
@@ -4934,7 +5692,7 @@ function LessonSceneFlow({
           <footer>
             <div>
               <small>这一幕带走什么</small>
-              <strong>{scene.takeaway}</strong>
+              <strong><MathText value={scene.takeaway} /></strong>
             </div>
             {isChoiceScene && isCorrect ? (
               <div className="lesson-route-actions">
@@ -5177,7 +5935,7 @@ function PracticeCard({
             <small>迁移判断</small>
             <span>单选</span>
           </div>
-          <h3>{exercise.question}</h3>
+          <h3><MathText value={exercise.question} /></h3>
         </header>
 
         <div className="practice-options">
@@ -5201,7 +5959,7 @@ function PracticeCard({
                 onClick={() => setSelected(optionIndex)}
               >
                 <i>{String.fromCharCode(65 + optionIndex)}</i>
-                <span>{option}</span>
+                <span><MathText value={option} /></span>
                 <em />
               </button>
             );
@@ -5213,7 +5971,7 @@ function PracticeCard({
             <span>{String(hintCount).padStart(2, "0")}</span>
             <div>
               <small>助教提示</small>
-              <p>{hintText}</p>
+              <p><MathText value={hintText} /></p>
             </div>
           </section>
         ) : null}
@@ -5241,9 +5999,13 @@ function PracticeCard({
                   : "现在对照完整解析"}
             </strong>
             <p>
-              {isCorrect || attempts >= 2
-                ? exercise.explanation
-                : "重新检查题目中的限定词，以及每个选项是否同时满足这些条件。"}
+              <MathText
+                value={
+                  isCorrect || attempts >= 2
+                    ? exercise.explanation
+                    : "重新检查题目中的限定词，以及每个选项是否同时满足这些条件。"
+                }
+              />
             </p>
           </section>
         ) : null}
