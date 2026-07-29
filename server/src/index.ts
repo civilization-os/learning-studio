@@ -1,5 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { listAgents, runAgent } from "./agents/index.js";
+import { createChapterToolLibraryFingerprint } from "./agents/chapterToolLibraryAgent.js";
 import { callDeepSeek, listDeepSeekModels } from "./deepseek.js";
 import {
   createProject,
@@ -14,6 +15,7 @@ import {
 import {
   AgentName,
   AiSettings,
+  ChapterToolLibrary,
   CourseStrategy,
   CourseChapter,
   LessonContent,
@@ -388,6 +390,32 @@ function isValidLessonContent(value: unknown): value is LessonContent {
   if (!value || typeof value !== "object") return false;
   const content = value as Partial<LessonContent>;
   const learningDesign = content.learningDesign;
+  const toolbook = content.toolbook;
+  const toolbookValid =
+    toolbook === undefined ||
+    (typeof toolbook.title === "string" &&
+      typeof toolbook.scope === "string" &&
+      typeof toolbook.completenessNote === "string" &&
+      Array.isArray(toolbook.items) &&
+      toolbook.items.length >= 2 &&
+      toolbook.items.length <= 18 &&
+      toolbook.items.every(
+        (item) =>
+          typeof item.title === "string" &&
+          [
+            "formula",
+            "rule",
+            "checklist",
+            "command",
+            "template",
+            "reference",
+          ].includes(item.category) &&
+          ["remember", "lookup"].includes(item.tier) &&
+          Array.isArray(item.content) &&
+          item.content.every((entry) => typeof entry === "string") &&
+          typeof item.useWhen === "string" &&
+          typeof item.boundary === "string",
+      ));
   const learningDesignValid =
     learningDesign === undefined ||
     (validStrategyModes.has(String(learningDesign.strategyMode)) &&
@@ -437,7 +465,104 @@ function isValidLessonContent(value: unknown): value is LessonContent {
     content.exercise.options.length === 4 &&
     typeof content.exercise.answerIndex === "number" &&
     typeof content.exercise.explanation === "string" &&
-    learningDesignValid
+    learningDesignValid &&
+    toolbookValid
+  );
+}
+
+function getChapterRoute(pathname: string, action: string) {
+  const match = pathname.match(
+    new RegExp(`^/api/projects/([^/]+)/chapters/([^/]+)/${action}$`),
+  );
+  return match
+    ? {
+        projectId: decodeURIComponent(match[1]),
+        chapterId: decodeURIComponent(match[2]),
+      }
+    : null;
+}
+
+const validChapterToolCategories = new Set([
+  "concept",
+  "formula",
+  "method",
+  "decision",
+  "procedure",
+  "checklist",
+  "pattern",
+  "reference",
+]);
+const validChapterToolPlacements = new Set([
+  "chapter-core",
+  "chapter-support",
+  "later-bridge",
+]);
+const validChapterToolBases = new Set([
+  "course-scope",
+  "reference-structure",
+  "section-outcome",
+  "downstream-dependency",
+]);
+
+function isValidChapterToolLibrary(
+  value: unknown,
+): value is ChapterToolLibrary {
+  if (!value || typeof value !== "object") return false;
+  const library = value as Partial<ChapterToolLibrary>;
+  return (
+    library.schemaVersion === 1 &&
+    typeof library.chapterId === "string" &&
+    typeof library.title === "string" &&
+    typeof library.scope === "string" &&
+    typeof library.generatedAt === "string" &&
+    typeof library.modelName === "string" &&
+    typeof library.outlineFingerprint === "string" &&
+    Array.isArray(library.sourceRefs) &&
+    library.sourceRefs.every((item) => typeof item === "string") &&
+    Array.isArray(library.items) &&
+    library.items.length >= 4 &&
+    library.items.length <= 120 &&
+    library.items.every(
+      (item) =>
+        typeof item.id === "string" &&
+        typeof item.title === "string" &&
+        validChapterToolCategories.has(item.category) &&
+        validChapterToolPlacements.has(item.placement) &&
+        typeof item.summary === "string" &&
+        Array.isArray(item.content) &&
+        item.content.length > 0 &&
+        item.content.every((entry) => typeof entry === "string") &&
+        typeof item.useWhen === "string" &&
+        typeof item.boundary === "string" &&
+        (item.introducedInSectionId === undefined ||
+          typeof item.introducedInSectionId === "string") &&
+        Array.isArray(item.relatedSectionIds) &&
+        item.relatedSectionIds.every((entry) => typeof entry === "string") &&
+        Array.isArray(item.usedInSectionIds) &&
+        item.usedInSectionIds.every((entry) => typeof entry === "string") &&
+        Array.isArray(item.sourceRefs) &&
+        item.sourceRefs.every((entry) => typeof entry === "string") &&
+        Array.isArray(item.basis) &&
+        item.basis.length > 0 &&
+        item.basis.every((entry) => validChapterToolBases.has(entry)),
+    ) &&
+    Boolean(library.generation) &&
+    typeof library.generation?.webSearchUsed === "boolean" &&
+    Array.isArray(library.generation.researchQueries) &&
+    library.generation.researchQueries.every(
+      (entry) => typeof entry === "string",
+    ) &&
+    Array.isArray(library.generation.coverageAreas) &&
+    library.generation.coverageAreas.every(
+      (entry) => typeof entry === "string",
+    ) &&
+    Array.isArray(library.generation.passes) &&
+    ["scope", "research", "inventory", "dependencies", "review"].every(
+      (pass) =>
+        library.generation?.passes.includes(
+          pass as ChapterToolLibrary["generation"]["passes"][number],
+        ),
+    )
   );
 }
 
@@ -613,6 +738,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       type?: unknown;
       title?: unknown;
       projectId?: unknown;
+      chapterId?: unknown;
       sectionId?: unknown;
     }>(req);
     const validTypes = new Set<GenerationTaskType>([
@@ -621,6 +747,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       "course-outline",
       "outline-polish",
       "lesson-content",
+      "chapter-tool-library",
       "tutor-reply",
       "exercise",
       "agent-run",
@@ -639,6 +766,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       title: body.title,
       ...(typeof body.projectId === "string"
         ? { projectId: body.projectId }
+        : {}),
+      ...(typeof body.chapterId === "string"
+        ? { chapterId: body.chapterId }
         : {}),
       ...(typeof body.sectionId === "string"
         ? { sectionId: body.sectionId }
@@ -927,6 +1057,89 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       completeGenerationTask(taskId, "新版课程结构已经准备好");
     }
     return sendJson(res, 200, { ...result, project });
+  }
+
+  const chapterToolRoute = getChapterRoute(
+    pathname,
+    "generate-tool-library",
+  );
+  if (req.method === "POST" && chapterToolRoute) {
+    const body = await readJson<{ force?: unknown }>(req);
+    const store = await readStore();
+    const taskId = getRequestTaskId(req);
+    const project = store.projects.find(
+      (item) => item.id === chapterToolRoute.projectId,
+    );
+    if (!project) return sendJson(res, 404, { error: "项目不存在" });
+    const chapter = project.chapters.find(
+      (item) => item.id === chapterToolRoute.chapterId,
+    );
+    if (!chapter) return sendJson(res, 404, { error: "课程章节不存在" });
+
+    const currentFingerprint = createChapterToolLibraryFingerprint(
+      project,
+      chapter.id,
+    );
+    if (
+      body.force !== true &&
+      chapter.toolLibrary &&
+      chapter.toolLibrary.outlineFingerprint === currentFingerprint &&
+      isValidChapterToolLibrary(chapter.toolLibrary)
+    ) {
+      completeGenerationTask(taskId, "已经加载保存的本章工具");
+      return sendJson(res, 200, {
+        project,
+        toolLibrary: chapter.toolLibrary,
+        cached: true,
+        summary: "已加载保存的本章工具。",
+      });
+    }
+    if (!store.aiSettings.apiKey) {
+      throw new HttpError(400, "请先在设置中配置 DeepSeek API Key");
+    }
+    if (!store.aiSettings.modelName.trim()) {
+      throw new HttpError(400, "请先从 DeepSeek 官方列表选择模型");
+    }
+
+    try {
+      const result = await runAgent({
+        agentName: "chapter-tool-library",
+        input: { chapterId: chapter.id },
+        projectId: project.id,
+        store,
+        reportProgress: getRequestProgressReporter(req),
+      });
+      if (!isValidChapterToolLibrary(result.data.toolLibrary)) {
+        throw new Error("本章工具整理结果结构不完整");
+      }
+      const incomingSources = Array.isArray(result.data.sources)
+        ? result.data.sources.filter(isValidWebSource)
+        : [];
+      const sourcesByUrl = new Map(
+        (project.sources ?? []).map((source) => [source.url, source]),
+      );
+      for (const source of incomingSources) {
+        sourcesByUrl.set(source.url, source);
+      }
+      project.sources = Array.from(sourcesByUrl.values());
+      chapter.toolLibrary = result.data.toolLibrary;
+      await writeStore(store);
+      completeGenerationTask(taskId, "本章工具已经整理完成");
+      return sendJson(res, 200, {
+        project,
+        toolLibrary: chapter.toolLibrary,
+        cached: false,
+        summary: result.summary,
+        ...(typeof result.data.warning === "string"
+          ? { warning: result.data.warning }
+          : {}),
+      });
+    } catch (error) {
+      throw new HttpError(
+        502,
+        error instanceof Error ? error.message : "本章工具整理失败",
+      );
+    }
   }
 
   const lessonRoute = getSectionRoute(pathname, "generate-content");

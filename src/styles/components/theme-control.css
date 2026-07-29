@@ -1,0 +1,113 @@
+.theme-control {
+  position: relative;
+}
+
+.theme-control > summary {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--color-surface-muted);
+  color: var(--color-accent);
+  cursor: pointer;
+  list-style: none;
+}
+
+.theme-control > summary::-webkit-details-marker {
+  display: none;
+}
+
+.theme-control > summary:hover,
+.theme-control[open] > summary {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-accent);
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 80;
+  display: grid;
+  width: 294px;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-3);
+  backdrop-filter: blur(22px);
+}
+
+.theme-menu > header {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px 10px;
+}
+
+.theme-menu > header span {
+  color: var(--color-text);
+  font-weight: 900;
+}
+
+.theme-menu > header small {
+  color: var(--color-text-muted);
+}
+
+.theme-menu > button {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 22px;
+  gap: 10px;
+  align-items: center;
+  min-height: 58px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.theme-menu > button:hover {
+  background: var(--color-surface-subtle);
+}
+
+.theme-menu > button.is-active {
+  border-color: color-mix(in srgb, var(--color-accent) 32%, var(--color-border));
+  background: var(--color-accent-soft);
+}
+
+.theme-menu > button > i {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--color-surface-muted);
+  color: var(--color-accent);
+  font-style: normal;
+}
+
+.theme-menu > button > span {
+  display: grid;
+  gap: 2px;
+}
+
+.theme-menu > button strong {
+  color: var(--color-text);
+}
+
+.theme-menu > button small {
+  color: var(--color-text-muted);
+}
+
+.theme-menu > button > em {
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 950;
+  text-align: center;
+}

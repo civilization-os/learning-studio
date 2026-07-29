@@ -1,0 +1,134 @@
+:root {
+  color-scheme: light;
+  font-family:
+    "Aptos",
+    "PingFang SC",
+    "Microsoft YaHei UI",
+    "Microsoft YaHei",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+
+  /* Canvas */
+  --color-canvas: #f4f7fa;
+  --color-canvas-grid: rgb(207 220 231 / 42%);
+  --color-canvas-blue: rgb(96 165 250 / 10%);
+  --color-canvas-green: rgb(52 211 153 / 8%);
+
+  /* Surfaces */
+  --color-surface: #ffffff;
+  --color-surface-raised: rgb(255 255 255 / 92%);
+  --color-surface-subtle: #f2f6f9;
+  --color-surface-muted: #e8f2fa;
+  --color-surface-accent: #deedf8;
+  --color-surface-inverse: #153a55;
+  --color-surface-inverse-soft: #1b4b64;
+  --color-feature: #153a55;
+  --color-feature-soft: #1d4d67;
+  --color-feature-text: #f7fbfd;
+  --color-feature-muted: #b8d0de;
+
+  /* Content */
+  --color-text: #102231;
+  --color-text-muted: #617386;
+  --color-text-quiet: #8493a3;
+  --color-text-inverse: #f7fbfd;
+
+  /* Borders and actions */
+  --color-border: #d7e2ea;
+  --color-border-strong: #bfd0dc;
+  --color-accent: #0869a8;
+  --color-accent-hover: #07598e;
+  --color-accent-soft: #deedf8;
+  --color-action-fill: #102f45;
+  --color-action-fill-hover: #17435e;
+  --color-action-text: #f7fbfd;
+  --color-success: #2bbf91;
+  --color-warning: #d99c16;
+  --color-danger: #df665d;
+
+  /* State surfaces */
+  --color-success-surface: #e8f8f2;
+  --color-warning-surface: #fff6df;
+  --color-danger-surface: #fff0ee;
+
+  /* Elevation */
+  --shadow-1: 0 8px 24px rgb(22 48 72 / 6%);
+  --shadow-2: 0 14px 38px rgb(22 48 72 / 9%);
+  --shadow-3: 0 20px 54px rgb(15 66 101 / 14%);
+  --overlay-backdrop: rgb(17 31 43 / 42%);
+
+  /* Shape and layout */
+  --radius-sm: 12px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --radius-xl: 30px;
+  --layout-width: min(calc(100vw - 48px), 1560px);
+
+  /* Compatibility aliases while legacy modules are migrated. */
+  --surface: var(--color-surface);
+  --surface-soft: var(--color-surface-subtle);
+  --surface-blue: var(--color-surface-muted);
+  --ink: var(--color-text);
+  --muted: var(--color-text-muted);
+  --quiet: var(--color-text-quiet);
+  --line: var(--color-border);
+  --line-strong: var(--color-border-strong);
+  --primary: var(--color-accent);
+  --primary-hover: var(--color-accent-hover);
+  --primary-soft: var(--color-accent-soft);
+  --green: var(--color-success);
+  --amber: var(--color-warning);
+  --red: var(--color-danger);
+  --shadow: var(--shadow-2);
+  --shadow-active: var(--shadow-3);
+  --radius: var(--radius-lg);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-canvas: #0c1720;
+  --color-canvas-grid: rgb(72 96 112 / 14%);
+  --color-canvas-blue: rgb(48 139 190 / 12%);
+  --color-canvas-green: rgb(43 181 139 / 8%);
+
+  --color-surface: #111f2a;
+  --color-surface-raised: rgb(17 31 42 / 94%);
+  --color-surface-subtle: #172733;
+  --color-surface-muted: #1b3140;
+  --color-surface-accent: #173d54;
+  --color-surface-inverse: #dceaf2;
+  --color-surface-inverse-soft: #c6dce8;
+  --color-feature: #15364b;
+  --color-feature-soft: #1b465e;
+  --color-feature-text: #f4f9fb;
+  --color-feature-muted: #b4c9d5;
+
+  --color-text: #edf4f7;
+  --color-text-muted: #b4c2cc;
+  --color-text-quiet: #8395a2;
+  --color-text-inverse: #102231;
+
+  --color-border: #2a3d4b;
+  --color-border-strong: #3b5567;
+  --color-accent: #62bced;
+  --color-accent-hover: #82cef4;
+  --color-accent-soft: #193e55;
+  --color-action-fill: #236f99;
+  --color-action-fill-hover: #2c82af;
+  --color-action-text: #f7fbfd;
+  --color-success: #42cfa1;
+  --color-warning: #e8b84d;
+  --color-danger: #f0837a;
+
+  --color-success-surface: #15382f;
+  --color-warning-surface: #3a301d;
+  --color-danger-surface: #3c2525;
+
+  --shadow-1: 0 8px 24px rgb(0 0 0 / 18%);
+  --shadow-2: 0 16px 40px rgb(0 0 0 / 26%);
+  --shadow-3: 0 24px 58px rgb(0 0 0 / 38%);
+  --overlay-backdrop: rgb(1 8 13 / 68%);
+}

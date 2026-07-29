@@ -1,0 +1,152 @@
+.settings-page {
+  color: var(--color-text);
+}
+
+.settings-hero--refined {
+  border-color: var(--color-border);
+  background:
+    radial-gradient(circle at 88% 0%, var(--color-canvas-green), transparent 17rem),
+    radial-gradient(circle at 12% 100%, var(--color-canvas-blue), transparent 18rem),
+    var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-2);
+}
+
+.settings-hero--refined .settings-hero-copy h1 {
+  color: var(--color-text);
+}
+
+.settings-hero--refined .settings-hero-copy > span {
+  color: var(--color-text-muted);
+}
+
+.settings-hero--refined .settings-service-status span {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-quiet);
+}
+
+.settings-service-status span i {
+  background: var(--color-border-strong);
+}
+
+.settings-service-status span.is-ready,
+.settings-status-badge.is-ready {
+  border-color: color-mix(in srgb, var(--color-success) 30%, var(--color-border));
+  background: var(--color-success-surface);
+  color: var(--color-success);
+}
+
+.settings-grid--refined .settings-card {
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.settings-card-head h2,
+.settings-capabilities > div > span {
+  color: var(--color-text);
+}
+
+.settings-card-head p,
+.settings-field-label,
+.settings-grid--refined .settings-hint,
+.settings-capabilities > div > p {
+  color: var(--color-text-muted);
+}
+
+.settings-status-badge {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-quiet);
+}
+
+.settings-grid--refined input {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.custom-select-trigger {
+  border-color: var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+}
+
+.custom-select-trigger:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.custom-select-trigger:focus-visible,
+.custom-select.is-open .custom-select-trigger {
+  border-color: color-mix(in srgb, var(--color-accent) 44%, var(--color-border));
+  background: var(--color-surface);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.custom-select-menu {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-3);
+}
+
+.custom-select-option {
+  color: var(--color-text);
+}
+
+.custom-select-option:hover,
+.custom-select-option.is-highlighted {
+  background: var(--color-surface-muted);
+}
+
+.custom-select-option.is-selected {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.custom-select-option small {
+  color: var(--color-text-quiet);
+}
+
+.custom-select-check {
+  background: var(--color-surface);
+  color: var(--color-accent);
+}
+
+.settings-search-note,
+.settings-capabilities {
+  background:
+    radial-gradient(circle at 100% 0%, var(--color-canvas-green), transparent 14rem),
+    var(--color-surface-subtle);
+}
+
+.settings-search-note strong {
+  color: var(--color-text);
+}
+
+.settings-search-note p {
+  color: var(--color-text-muted);
+}
+
+.settings-capabilities li {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.settings-capabilities li i {
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: var(--color-success);
+}
+
+.settings-actions .primary-pill,
+.settings-hero-actions .primary-pill {
+  background: var(--color-action-fill);
+  color: var(--color-action-text);
+}
+
+.settings-actions .primary-pill:hover:not(:disabled),
+.settings-hero-actions .primary-pill:hover:not(:disabled) {
+  background: var(--color-action-fill-hover);
+}

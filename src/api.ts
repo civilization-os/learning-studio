@@ -1,5 +1,6 @@
 import type {
   CourseChapter,
+  ChapterToolLibrary,
   LearningProject,
   LessonContent,
   LessonProgress,
@@ -66,12 +67,14 @@ export type GenerationTask = {
     | "course-outline"
     | "outline-polish"
     | "lesson-content"
+    | "chapter-tool-library"
     | "tutor-reply"
     | "exercise"
     | "agent-run"
     | "connection-test";
   title: string;
   projectId?: string;
+  chapterId?: string;
   sectionId?: string;
   status: GenerationTaskStatus;
   stage: string;
@@ -112,6 +115,7 @@ async function createGenerationTask(input: {
   type: GenerationTask["type"];
   title: string;
   projectId?: string;
+  chapterId?: string;
   sectionId?: string;
 }) {
   const result = await apiRequest<{ task: GenerationTask }>(
@@ -130,6 +134,7 @@ async function trackedApiRequest<T>(
     type: GenerationTask["type"];
     title: string;
     projectId?: string;
+    chapterId?: string;
     sectionId?: string;
   },
   init?: RequestInit,
@@ -296,6 +301,32 @@ export async function generateRemoteLesson(
       title: force ? "检查并更新本节课堂" : "准备本节课堂",
       projectId,
       sectionId,
+    },
+    {
+      method: "POST",
+      body: JSON.stringify({ force }),
+    },
+  );
+}
+
+export async function generateRemoteChapterToolLibrary(
+  projectId: string,
+  chapterId: string,
+  force = false,
+): Promise<{
+  project: LearningProject;
+  toolLibrary: ChapterToolLibrary;
+  cached: boolean;
+  summary: string;
+  warning?: string;
+}> {
+  return trackedApiRequest(
+    `/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}/generate-tool-library`,
+    {
+      type: "chapter-tool-library",
+      title: force ? "重新整理本章工具" : "整理本章工具",
+      projectId,
+      chapterId,
     },
     {
       method: "POST",

@@ -1,5 +1,6 @@
 import { AgentName, AgentRunResult, AppStore } from "../types.js";
 import { courseContentAgent } from "./courseContentAgent.js";
+import { chapterToolLibraryAgent } from "./chapterToolLibraryAgent.js";
 import { exerciseAgent } from "./exerciseAgent.js";
 import { learningPlannerAgent } from "./learningPlannerAgent.js";
 import { outlineAgent } from "./outlineAgent.js";
@@ -12,6 +13,7 @@ const agents: Record<AgentName, AgentDefinition> = {
   "project-creator": projectCreatorAgent,
   outline: outlineAgent,
   "course-content": courseContentAgent,
+  "chapter-tool-library": chapterToolLibraryAgent,
   exercise: exerciseAgent,
   tutor: tutorAgent,
   "learning-planner": learningPlannerAgent,

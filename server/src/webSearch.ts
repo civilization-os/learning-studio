@@ -52,6 +52,7 @@ export async function searchWeb(
   query: string,
   options?: {
     maxResults?: number;
+    searchDepth?: "basic" | "advanced";
   },
 ): Promise<WebSearchResult> {
   if (!settings.apiKey) {
@@ -77,7 +78,7 @@ export async function searchWeb(
       },
       body: JSON.stringify({
         query,
-        search_depth: "basic",
+        search_depth: options?.searchDepth ?? "basic",
         topic: "general",
         max_results: maxResults,
         include_answer: false,

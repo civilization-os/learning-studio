@@ -1,0 +1,20 @@
+/*
+ * Learning Studio CSS framework
+ *
+ * Order is intentional. The legacy layer keeps current screens stable while
+ * semantic tokens and migrated modules take precedence without specificity
+ * battles. New selectors must not be added to legacy.css.
+ */
+@layer reset, legacy, tokens, base, components, pages, responsive, utilities;
+
+@import url("./legacy.css") layer(legacy);
+@import url("./tokens.css") layer(tokens);
+@import url("./base.css") layer(base);
+@import url("./components/app-shell.css") layer(components);
+@import url("./components/theme-control.css") layer(components);
+@import url("./components/chapter-tool-library.css") layer(components);
+@import url("./pages/course-hub.css") layer(pages);
+@import url("./pages/classroom.css") layer(pages);
+@import url("./pages/settings.css") layer(pages);
+@import url("./responsive.css") layer(responsive);
+@import url("./utilities.css") layer(utilities);

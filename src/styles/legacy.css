@@ -382,6 +382,375 @@ main.classroom-page {
   font-size: 0.82rem;
 }
 
+.toolbook-open-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 28px;
+  gap: 4px 10px;
+  align-items: center;
+  width: 100%;
+  min-width: 190px;
+  border: 1px solid rgb(20 58 86 / 14%);
+  border-radius: 17px;
+  background: #173d59;
+  padding: 11px 11px 11px 14px;
+  color: white;
+  text-align: left;
+  box-shadow: 0 12px 24px rgb(21 53 78 / 14%);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.toolbook-open-button:hover:not(:disabled) {
+  box-shadow: 0 15px 30px rgb(21 53 78 / 20%);
+  transform: translateY(-1px);
+}
+
+.toolbook-open-button > span {
+  grid-row: 1;
+  grid-column: 1;
+  font-size: 0.73rem;
+  font-weight: 920;
+}
+
+.toolbook-open-button > strong {
+  grid-row: 2;
+  grid-column: 1 / 3;
+  color: rgb(255 255 255 / 64%);
+  font-size: 0.62rem;
+}
+
+.toolbook-open-button > i {
+  grid-row: 1 / 3;
+  grid-column: 3;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 11%);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.toolbook-open-button.is-pending {
+  border-style: dashed;
+  border-color: #b7cce0;
+  background: #f2f7fc;
+  color: #31526d;
+  box-shadow: none;
+}
+
+.toolbook-open-button.is-pending > strong {
+  color: #7a90a3;
+}
+
+.toolbook-open-button.is-pending > i {
+  background: #e2edf7;
+  color: var(--primary);
+}
+
+.toolbook-backdrop {
+  position: fixed;
+  z-index: 118;
+  inset: 0;
+  visibility: hidden;
+  background: rgb(11 29 43 / 0%);
+  cursor: default;
+  opacity: 0;
+  transition: opacity 220ms ease, visibility 220ms ease;
+  backdrop-filter: blur(0);
+}
+
+.toolbook-backdrop.is-open {
+  visibility: visible;
+  background: rgb(11 29 43 / 28%);
+  opacity: 1;
+  backdrop-filter: blur(5px);
+}
+
+.lesson-toolbook {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  bottom: 18px;
+  z-index: 120;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(590px, calc(100vw - 36px));
+  overflow: hidden;
+  border: 1px solid rgb(196 209 218 / 86%);
+  border-radius: 28px;
+  background:
+    linear-gradient(90deg, transparent 49px, rgb(197 87 77 / 13%) 50px, transparent 51px),
+    repeating-linear-gradient(180deg, #fbfaf5 0 37px, #dce8ef 38px, #fbfaf5 39px);
+  box-shadow: 0 32px 90px rgb(15 37 54 / 30%);
+  opacity: 0;
+  transform: translateX(calc(100% + 32px));
+  transition: opacity 220ms ease, transform 280ms cubic-bezier(.2, .76, .24, 1);
+}
+
+.lesson-toolbook.is-open {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.toolbook-header {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+  background: #173d59;
+  padding: 25px 24px 22px 31px;
+  color: white;
+}
+
+.toolbook-header > div {
+  min-width: 0;
+}
+
+.toolbook-header span {
+  color: #84c9ef;
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+
+.toolbook-header small {
+  display: block;
+  overflow: hidden;
+  margin-top: 7px;
+  color: rgb(255 255 255 / 54%);
+  font-size: 0.65rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbook-header h2 {
+  margin-top: 4px;
+  color: white;
+  font-size: clamp(1.35rem, 2.5vw, 1.85rem);
+  line-height: 1.18;
+}
+
+.toolbook-header .icon-button {
+  flex: 0 0 auto;
+  border-color: rgb(255 255 255 / 12%);
+  background: rgb(255 255 255 / 9%);
+  color: white;
+}
+
+.toolbook-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 22px 32px 31px;
+  scrollbar-width: thin;
+}
+
+.toolbook-scope {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 17px;
+  align-items: center;
+  border: 1px solid rgb(46 87 114 / 15%);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 88%);
+  padding: 16px;
+}
+
+.toolbook-scope > div {
+  display: grid;
+  place-items: center;
+  min-height: 72px;
+  border-radius: 15px;
+  background: #173d59;
+  color: white;
+}
+
+.toolbook-scope > div span {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.toolbook-scope > div small {
+  color: rgb(255 255 255 / 60%);
+  font-size: 0.54rem;
+}
+
+.toolbook-scope p {
+  color: #3e5669;
+  font-size: 0.76rem;
+  font-weight: 720;
+  line-height: 1.65;
+}
+
+.toolbook-index {
+  display: flex;
+  gap: 8px;
+  margin: 13px 0 20px;
+}
+
+.toolbook-index > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 86%);
+  padding: 7px 11px;
+  color: #6a7b89;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.toolbook-index strong {
+  color: var(--primary);
+  font-size: 0.76rem;
+}
+
+.toolbook-list {
+  display: grid;
+  gap: 13px;
+}
+
+.toolbook-item {
+  overflow: hidden;
+  border: 1px solid rgb(55 91 116 / 14%);
+  border-radius: 21px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 10px 24px rgb(30 57 75 / 7%);
+}
+
+.toolbook-item::before {
+  display: block;
+  width: 100%;
+  height: 3px;
+  background: #8fb7d2;
+  content: "";
+}
+
+.toolbook-item--remember::before {
+  background: #1db88b;
+}
+
+.toolbook-item > header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 11px;
+  align-items: start;
+  padding: 15px 16px 8px;
+}
+
+.toolbook-item > header > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: #e9f3fb;
+  color: var(--primary);
+  font-size: 0.65rem;
+  font-weight: 950;
+}
+
+.toolbook-item--remember > header > span {
+  background: #e5f8f1;
+  color: #118264;
+}
+
+.toolbook-item > header small {
+  color: #7b8d9c;
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.toolbook-item h3 {
+  margin-top: 3px;
+  color: #173047;
+  font-size: 0.96rem;
+  line-height: 1.35;
+}
+
+.toolbook-item ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 4px 18px 15px 62px;
+  list-style: none;
+}
+
+.toolbook-item li {
+  position: relative;
+  color: #2e4559;
+  font-size: 0.78rem;
+  font-weight: 740;
+  line-height: 1.6;
+}
+
+.toolbook-item li::before {
+  position: absolute;
+  top: 0.72em;
+  left: -16px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #64a9d5;
+  content: "";
+}
+
+.toolbook-item dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid #e3eaf0;
+  background: #f7fafc;
+}
+
+.toolbook-item dl > div {
+  min-width: 0;
+  padding: 12px 15px;
+}
+
+.toolbook-item dl > div + div {
+  border-left: 1px solid #e3eaf0;
+}
+
+.toolbook-item dt {
+  margin-bottom: 4px;
+  color: var(--primary);
+  font-size: 0.56rem;
+  font-weight: 950;
+}
+
+.toolbook-item dd {
+  color: #526779;
+  font-size: 0.68rem;
+  line-height: 1.55;
+}
+
+.toolbook-completeness {
+  margin-top: 18px;
+  border: 1px dashed rgb(31 90 128 / 24%);
+  border-radius: 18px;
+  background: rgb(237 246 252 / 84%);
+  padding: 15px 17px;
+}
+
+.toolbook-completeness span {
+  color: var(--primary);
+  font-size: 0.62rem;
+  font-weight: 950;
+}
+
+.toolbook-completeness p {
+  margin-top: 5px;
+  color: #587083;
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
 .classroom-layout--v3 .learning-route {
   position: sticky;
   top: 171px;
@@ -643,8 +1012,524 @@ nav.lesson-nav button:disabled {
     padding-inline: 8px;
   }
 
-  nav.lesson-nav button small {
+nav.lesson-nav button small {
     display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .toolbook-open-button {
+    min-width: 0;
+    min-height: 48px;
+    border-radius: 15px;
+  }
+
+  .lesson-toolbook {
+    top: max(7px, env(safe-area-inset-top));
+    right: 7px;
+    bottom: max(7px, env(safe-area-inset-bottom));
+    width: calc(100vw - 14px);
+    border-radius: 22px;
+  }
+
+  .toolbook-header {
+    padding: 19px 16px 17px 21px;
+  }
+
+  .toolbook-header h2 {
+    font-size: 1.3rem;
+  }
+
+  .toolbook-header .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+
+  .toolbook-scroll {
+    padding: 16px 12px 24px 21px;
+  }
+
+  .toolbook-scope {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    border-radius: 17px;
+    padding: 12px;
+  }
+
+  .toolbook-scope > div {
+    min-height: 62px;
+  }
+
+  .toolbook-scope > div span {
+    font-size: 1.4rem;
+  }
+
+  .toolbook-scope p {
+    font-size: 0.7rem;
+  }
+
+  .toolbook-index {
+    margin-bottom: 14px;
+  }
+
+  .toolbook-item {
+    border-radius: 18px;
+  }
+
+  .toolbook-item > header {
+    grid-template-columns: 32px minmax(0, 1fr);
+    padding: 13px 13px 7px;
+  }
+
+  .toolbook-item > header > span {
+    width: 31px;
+    height: 31px;
+  }
+
+  .toolbook-item h3 {
+    font-size: 0.88rem;
+  }
+
+  .toolbook-item ul {
+    padding: 4px 15px 13px 57px;
+  }
+
+  .toolbook-item li {
+    font-size: 0.72rem;
+  }
+
+  .toolbook-item dl {
+    grid-template-columns: 1fr;
+  }
+
+  .toolbook-item dl > div + div {
+    border-top: 1px solid #e3eaf0;
+    border-left: 0;
+  }
+}
+
+/* Theme control — system-aware reading modes, not a decorative toggle. */
+.theme-control {
+  position: relative;
+}
+
+.theme-control > summary {
+  display: grid;
+  place-items: center;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 1rem;
+  list-style: none;
+}
+
+.theme-control > summary::-webkit-details-marker {
+  display: none;
+}
+
+.theme-control[open] > summary {
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px rgb(8 105 168 / 14%);
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 140;
+  display: grid;
+  gap: 5px;
+  width: 286px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow: 0 20px 56px rgb(20 43 61 / 20%);
+  padding: 8px;
+  animation: stage-arrive 150ms ease both;
+  backdrop-filter: blur(22px);
+}
+
+.theme-menu > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 9px 10px;
+}
+
+.theme-menu > header span {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.theme-menu > header small {
+  color: var(--quiet);
+  font-size: 0.58rem;
+}
+
+.theme-menu > button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 20px;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  padding: 8px 10px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.theme-menu > button:hover {
+  background: var(--surface-soft);
+}
+
+.theme-menu > button.is-active {
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--line));
+  background: var(--primary-soft);
+}
+
+.theme-menu > button > i {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface) 72%, var(--surface-soft));
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-style: normal;
+}
+
+.theme-menu > button > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.theme-menu > button strong {
+  font-size: 0.72rem;
+}
+
+.theme-menu > button small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.4;
+}
+
+.theme-menu > button > em {
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 950;
+  text-align: center;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #101c27;
+  --surface-soft: #172633;
+  --surface-blue: #193044;
+  --ink: #edf4f7;
+  --muted: #9babb8;
+  --quiet: #738696;
+  --line: #273947;
+  --line-strong: #354b5c;
+  --primary: #54b6ec;
+  --primary-hover: #78c8f2;
+  --primary-soft: #183a50;
+  --green: #39c99b;
+  --amber: #e8b84d;
+  --red: #ef7c73;
+  --shadow: 0 14px 38px rgb(0 0 0 / 24%);
+  --shadow-active: 0 20px 48px rgb(0 0 0 / 34%);
+}
+
+html[data-theme="dark"] body {
+  color: var(--ink);
+  background:
+    linear-gradient(rgb(65 88 105 / 15%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(65 88 105 / 12%) 1px, transparent 1px),
+    radial-gradient(circle at 12% 4%, rgb(45 132 181 / 13%), transparent 28rem),
+    radial-gradient(circle at 92% 7%, rgb(38 156 119 / 9%), transparent 24rem),
+    #0b151f;
+  background-size: 40px 40px, 40px 40px, auto, auto, auto;
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  border-color: #2a3d4c;
+  background: #14232f;
+  color: var(--ink);
+}
+
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] select:focus {
+  border-color: #4c92bb;
+  background: #172a38;
+  box-shadow: 0 0 0 4px rgb(84 182 236 / 12%);
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #708493;
+}
+
+html[data-theme="dark"] .global-bar,
+html[data-theme="dark"] .floating-nav,
+html[data-theme="dark"] .generation-panel,
+html[data-theme="dark"] .project-card,
+html[data-theme="dark"] .create-card,
+html[data-theme="dark"] .empty-project-card,
+html[data-theme="dark"] .panel-card,
+html[data-theme="dark"] .form-card,
+html[data-theme="dark"] .generating-card,
+html[data-theme="dark"] .outline-card,
+html[data-theme="dark"] .toolbar-card,
+html[data-theme="dark"] .detail-hero,
+html[data-theme="dark"] .status-card,
+html[data-theme="dark"] .recommend-card,
+html[data-theme="dark"] .settings-hero,
+html[data-theme="dark"] .settings-card,
+html[data-theme="dark"] .classroom-top,
+html[data-theme="dark"] .course-drawer,
+html[data-theme="dark"] .ai-chat {
+  border-color: var(--line);
+  background: rgb(16 28 39 / 92%);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .generation-summary,
+html[data-theme="dark"] .generation-task,
+html[data-theme="dark"] .soft-pill,
+html[data-theme="dark"] .course-outline-edit,
+html[data-theme="dark"] .classroom-map-toggle,
+html[data-theme="dark"] .classroom-coach-toggle,
+html[data-theme="dark"] .lesson-generation-meta {
+  border-color: var(--line);
+  background: #172633;
+  color: #c5d4df;
+}
+
+html[data-theme="dark"] .generation-summary:hover,
+html[data-theme="dark"] .soft-pill:hover:not(:disabled),
+html[data-theme="dark"] .classroom-map-toggle:hover,
+html[data-theme="dark"] .classroom-coach-toggle:hover {
+  border-color: #3e5c70;
+  background: #1b3040;
+}
+
+html[data-theme="dark"] .icon-button {
+  background: #182b39;
+  color: var(--primary);
+}
+
+html[data-theme="dark"] .theme-menu {
+  border-color: #314654;
+  background: rgb(15 27 37 / 96%);
+  box-shadow: 0 24px 64px rgb(0 0 0 / 45%);
+}
+
+html[data-theme="dark"] .page-intro h1,
+html[data-theme="dark"] .panel-title h2,
+html[data-theme="dark"] .project-copy h2,
+html[data-theme="dark"] .form-head h1,
+html[data-theme="dark"] .settings-card h2,
+html[data-theme="dark"] .course-hub-title h1,
+html[data-theme="dark"] .course-hub-section-head h2,
+html[data-theme="dark"] .outline-hero-copy h1,
+html[data-theme="dark"] .outline-section-head h2,
+html[data-theme="dark"] .lesson-mission h1,
+html[data-theme="dark"] .stage-intro h2,
+html[data-theme="dark"] .lesson-scene h3,
+html[data-theme="dark"] .practice-task h3,
+html[data-theme="dark"] .reflect-teach-back h3 {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .project-copy p,
+html[data-theme="dark"] .course-hub-title > p,
+html[data-theme="dark"] .course-hub-section-head p,
+html[data-theme="dark"] .outline-hero-copy p,
+html[data-theme="dark"] .lesson-mission p,
+html[data-theme="dark"] .stage-intro p {
+  color: var(--muted);
+}
+
+html[data-theme="dark"] .course-hub-hero,
+html[data-theme="dark"] .outline-hero,
+html[data-theme="dark"] .lesson-mission {
+  border-color: var(--line);
+  background:
+    radial-gradient(circle at 100% 0%, rgb(43 191 145 / 8%), transparent 18rem),
+    radial-gradient(circle at 0% 100%, rgb(84 182 236 / 9%), transparent 20rem),
+    #101c27;
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="dark"] .course-hub-status > div,
+html[data-theme="dark"] .course-roadmap,
+html[data-theme="dark"] .course-next-card,
+html[data-theme="dark"] .course-hub-note,
+html[data-theme="dark"] .course-hub-sources,
+html[data-theme="dark"] .outline-rationale,
+html[data-theme="dark"] .outline-chapter,
+html[data-theme="dark"] .outline-check-card,
+html[data-theme="dark"] .outline-plan-card {
+  border-color: var(--line);
+  background: #101c27;
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .course-roadmap-section,
+html[data-theme="dark"] .course-hub-sources a,
+html[data-theme="dark"] .chapter-editor,
+html[data-theme="dark"] .section-editor,
+html[data-theme="dark"] .outline-sources,
+html[data-theme="dark"] .outline-source-card {
+  border-color: var(--line);
+  background: #152431;
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .classroom-layout--v3 .learning-route {
+  border-color: var(--line);
+  background: rgb(15 27 37 / 94%);
+  box-shadow: 0 14px 34px rgb(0 0 0 / 24%);
+}
+
+html[data-theme="dark"] .learning-route-step {
+  color: #b7c6d1;
+}
+
+html[data-theme="dark"] .learning-route-step.is-active {
+  background: #126ba2;
+  color: white;
+}
+
+html[data-theme="dark"] .classroom-layout--v3 .learning-stage,
+html[data-theme="dark"] .lesson-scene,
+html[data-theme="dark"] .practice-task,
+html[data-theme="dark"] .practice-brief,
+html[data-theme="dark"] .lesson-design-brief article,
+html[data-theme="dark"] .lesson-method-paths,
+html[data-theme="dark"] .lesson-success-criteria,
+html[data-theme="dark"] .confidence-check,
+html[data-theme="dark"] .reflect-teach-back {
+  border-color: var(--line);
+  background: #101c27;
+  color: var(--ink);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .orient-branch,
+html[data-theme="dark"] .lesson-scene-options button,
+html[data-theme="dark"] .practice-options button,
+html[data-theme="dark"] .lesson-scene-reveal li > p,
+html[data-theme="dark"] .lesson-reference-notes > div,
+html[data-theme="dark"] .lesson-strategy-summary > span,
+html[data-theme="dark"] .lesson-mission-meta > span {
+  border-color: var(--line);
+  background: #162531;
+  color: #d8e3e9;
+}
+
+html[data-theme="dark"] .lesson-scene-body {
+  background: linear-gradient(90deg, #173247, rgb(23 50 71 / 18%));
+  color: #d4e1e8;
+}
+
+html[data-theme="dark"] .lesson-scene-feedback,
+html[data-theme="dark"] .practice-feedback {
+  background: #15372f;
+  color: #9ae4c9;
+}
+
+html[data-theme="dark"] .lesson-scene-feedback.is-wrong,
+html[data-theme="dark"] .practice-hint {
+  background: #3a301b;
+  color: #f0d38a;
+}
+
+html[data-theme="dark"] .lesson-scene-hints > ol li,
+html[data-theme="dark"] .lesson-scene-reveal > p {
+  background: #362e1c;
+  color: #e9cf8d;
+}
+
+html[data-theme="dark"] .practice-options button.is-correct,
+html[data-theme="dark"] .lesson-scene-options button.is-correct {
+  border-color: #27795f;
+  background: #13352c;
+}
+
+html[data-theme="dark"] .practice-options button.is-wrong,
+html[data-theme="dark"] .lesson-scene-options button.is-wrong {
+  border-color: #854d48;
+  background: #3b2424;
+}
+
+html[data-theme="dark"] .lesson-toolbook {
+  border-color: #344b5a;
+  background:
+    linear-gradient(90deg, transparent 49px, rgb(204 100 91 / 13%) 50px, transparent 51px),
+    repeating-linear-gradient(180deg, #101c27 0 37px, #243847 38px, #101c27 39px);
+}
+
+html[data-theme="dark"] .toolbook-scope,
+html[data-theme="dark"] .toolbook-item {
+  border-color: #2a3f4e;
+  background: rgb(17 31 42 / 96%);
+}
+
+html[data-theme="dark"] .toolbook-scope p,
+html[data-theme="dark"] .toolbook-item li,
+html[data-theme="dark"] .toolbook-item dd {
+  color: #b6c5cf;
+}
+
+html[data-theme="dark"] .toolbook-item h3 {
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .toolbook-item dl {
+  border-color: #2a3f4e;
+  background: #142430;
+}
+
+html[data-theme="dark"] .toolbook-item dl > div + div {
+  border-color: #2a3f4e;
+}
+
+html[data-theme="dark"] .toolbook-index > span,
+html[data-theme="dark"] .toolbook-completeness {
+  border-color: #2c485a;
+  background: rgb(20 41 54 / 88%);
+  color: #9fb2bf;
+}
+
+html[data-theme="dark"] .ai-chat-message--assistant,
+html[data-theme="dark"] .coach-next-action,
+html[data-theme="dark"] .coach-progress-card {
+  background: #172633;
+  color: #d7e2e8;
+}
+
+html[data-theme="dark"] .delete-project-dialog {
+  border-color: var(--line);
+  background: #111f2a;
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .theme-menu {
+    position: fixed;
+    top: calc(max(8px, env(safe-area-inset-top)) + 62px);
+    right: 10px;
+    width: min(286px, calc(100vw - 20px));
   }
 }
 

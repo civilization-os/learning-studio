@@ -9,7 +9,7 @@
     "dev:check": "node scripts/dev.mjs --check",
     "server:build": "tsc -p server/tsconfig.json",
     "server:dev": "tsc -p server/tsconfig.json && node server/dist/index.js",
-    "test:server": "tsc -p server/tsconfig.json && node server/tests/generation-tasks.mjs && node server/tests/course-strategy.mjs && node server/tests/web-search-smoke.mjs",
+    "test:server": "tsc -p server/tsconfig.json && node server/tests/generation-tasks.mjs && node server/tests/course-strategy.mjs && node server/tests/chapter-tool-library.mjs && node server/tests/web-search-smoke.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0"
   },

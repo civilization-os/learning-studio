@@ -1,0 +1,141 @@
+.app {
+  min-height: 100vh;
+  padding-top: 88px;
+  padding-bottom: 116px;
+  color: var(--color-text);
+}
+
+.global-bar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: var(--layout-width);
+  min-height: 58px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(18px);
+  transform: translateX(-50%);
+}
+
+.brand-dot,
+.icon-button {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border-radius: 14px;
+}
+
+.brand-dot {
+  background: var(--color-feature);
+  color: var(--color-feature-text);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
+}
+
+.icon-button {
+  border: 1px solid transparent;
+  background: var(--color-surface-muted);
+  color: var(--color-accent);
+}
+
+.icon-button:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-accent);
+}
+
+.bar-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.generation-summary,
+.generation-task,
+.soft-pill,
+.course-outline-edit,
+.classroom-map-toggle,
+.classroom-coach-toggle,
+.lesson-generation-meta {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+}
+
+.generation-summary:hover,
+.soft-pill:hover:not(:disabled),
+.course-outline-edit:hover,
+.classroom-map-toggle:hover,
+.classroom-coach-toggle:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+}
+
+.generation-panel,
+.project-card,
+.create-card,
+.empty-project-card,
+.panel-card,
+.form-card,
+.generating-card,
+.outline-card,
+.toolbar-card,
+.detail-hero,
+.status-card,
+.recommend-card,
+.settings-hero,
+.settings-card,
+.classroom-top,
+.course-drawer,
+.ai-chat,
+.delete-project-dialog {
+  border-color: var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.primary-pill,
+.soft-pill,
+.text-button {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  padding-inline: 18px;
+}
+
+.primary-pill {
+  background: var(--color-accent);
+  color: white;
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+
+.primary-pill:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+
+.floating-nav,
+nav.lesson-nav {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(18px);
+}
+
+.floating-nav button,
+nav.lesson-nav button {
+  color: var(--color-text-muted);
+}
+
+.floating-nav button.is-active,
+nav.lesson-nav button.is-active {
+  background: var(--color-accent);
+  color: white;
+}

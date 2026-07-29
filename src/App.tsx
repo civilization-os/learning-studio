@@ -7,6 +7,7 @@ import {
   createRemoteProject,
   deleteRemoteProject,
   generateRemoteLesson,
+  generateRemoteChapterToolLibrary,
   generateRemoteOutline,
   generateRemoteProjectDescription,
   getRemotePreferenceRecommendations,
@@ -28,6 +29,8 @@ import {
 import { useToast } from "./components/ui/toast";
 import {
   CourseChapter,
+  ChapterToolLibrary,
+  ChapterToolPlacement,
   createProjectFromGoal,
   LessonContent,
   LessonKnowledgeState,
@@ -46,6 +49,18 @@ import { loadStudyState, saveStudyState } from "./storage";
 
 type MainView = "home" | "plan" | "review" | "stats";
 type AppView = MainView | "create" | "generating" | "outline" | "detail" | "classroom" | "settings";
+type ThemePreference = "system" | "light" | "dark";
+type ResolvedTheme = "light" | "dark";
+
+const themeStorageKey = "learning-studio-theme";
+
+function readThemePreference(): ThemePreference {
+  if (typeof window === "undefined") return "system";
+  const stored = window.localStorage.getItem(themeStorageKey);
+  return stored === "light" || stored === "dark" || stored === "system"
+    ? stored
+    : "system";
+}
 
 const navItems: Array<{ view: MainView; label: string; icon: string }> = [
   { view: "home", label: "首页", icon: "⌂" },
@@ -69,6 +84,19 @@ const knowledgeRoleLabels = {
   bridge: "桥梁",
   application: "应用",
   verification: "检验",
+};
+const toolbookCategoryLabels = {
+  formula: "公式",
+  rule: "规则",
+  checklist: "检查表",
+  command: "命令",
+  template: "模板",
+  reference: "参照",
+};
+const chapterToolPlacementLabels: Record<ChapterToolPlacement, string> = {
+  "chapter-core": "这一章会掌握",
+  "chapter-support": "学习时可以查",
+  "later-bridge": "后面会用到",
 };
 
 type MathTextPart =
@@ -168,6 +196,13 @@ function getSourceHost(url: string) {
 export default function App() {
   const { notify } = useToast();
   const [state, setState] = useState<StudyState>(() => loadStudyState());
+  const [themePreference, setThemePreference] =
+    useState<ThemePreference>(readThemePreference);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() =>
+    typeof window === "undefined"
+      ? false
+      : window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
   const [generationTasks, setGenerationTasks] = useState<GenerationTask[]>([]);
   const [view, setView] = useState<AppView>("home");
   const [draftProject, setDraftProject] = useState<LearningProject | null>(null);
@@ -181,6 +216,32 @@ export default function App() {
   useEffect(() => {
     saveStudyState(state);
   }, [state]);
+
+  const resolvedTheme: ResolvedTheme =
+    themePreference === "system"
+      ? systemPrefersDark
+        ? "dark"
+        : "light"
+      : themePreference;
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateSystemTheme = (event: MediaQueryListEvent) => {
+      setSystemPrefersDark(event.matches);
+    };
+    setSystemPrefersDark(media.matches);
+    media.addEventListener("change", updateSystemTheme);
+    return () => media.removeEventListener("change", updateSystemTheme);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
+    window.localStorage.setItem(themeStorageKey, themePreference);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", resolvedTheme === "dark" ? "#0b151f" : "#f4f7fa");
+  }, [resolvedTheme, themePreference]);
 
   useEffect(() => subscribeGenerationTasks(setGenerationTasks), []);
 
@@ -465,6 +526,9 @@ export default function App() {
         tasks={generationTasks}
         onHome={() => go("home")}
         onSettings={() => go("settings")}
+        resolvedTheme={resolvedTheme}
+        themePreference={themePreference}
+        onThemeChange={setThemePreference}
       />
 
       {view === "home" && (
@@ -498,6 +562,7 @@ export default function App() {
           project={activeProject}
           onOpenSection={openSection}
           onEditOutline={editProjectOutline}
+          onProjectUpdate={updateProject}
           onBack={() => go("home")}
         />
       )}
@@ -601,10 +666,16 @@ function GlobalTopBar({
   tasks,
   onHome,
   onSettings,
+  resolvedTheme,
+  themePreference,
+  onThemeChange,
 }: {
   tasks: GenerationTask[];
   onHome: () => void;
   onSettings: () => void;
+  resolvedTheme: ResolvedTheme;
+  themePreference: ThemePreference;
+  onThemeChange: (theme: ThemePreference) => void;
 }) {
   const visibleTasks = tasks.slice(0, 8);
   const activeTasks = tasks.filter(
@@ -689,9 +760,75 @@ function GlobalTopBar({
       </details>
       <div className="bar-actions">
         <button className="icon-button" onClick={onSettings} aria-label="设置">⚙</button>
-        <button className="icon-button" aria-label="主题">◐</button>
+        <ThemeControl
+          onChange={onThemeChange}
+          preference={themePreference}
+          resolvedTheme={resolvedTheme}
+        />
       </div>
     </header>
+  );
+}
+
+function ThemeControl({
+  onChange,
+  preference,
+  resolvedTheme,
+}: {
+  onChange: (theme: ThemePreference) => void;
+  preference: ThemePreference;
+  resolvedTheme: ResolvedTheme;
+}) {
+  const labels: Record<ThemePreference, string> = {
+    system: "跟随系统",
+    light: "浅色",
+    dark: "深色",
+  };
+  const icons: Record<ThemePreference, string> = {
+    system: "◐",
+    light: "☼",
+    dark: "☾",
+  };
+
+  return (
+    <details className="theme-control">
+      <summary
+        className="icon-button"
+        aria-label={`主题：${labels[preference]}，当前为${resolvedTheme === "dark" ? "深色" : "浅色"}`}
+        title={`主题：${labels[preference]}`}
+      >
+        {icons[preference]}
+      </summary>
+      <div className="theme-menu">
+        <header>
+          <span>阅读主题</span>
+          <small>当前为{resolvedTheme === "dark" ? "深色" : "浅色"}</small>
+        </header>
+        {(["system", "light", "dark"] as ThemePreference[]).map((theme) => (
+          <button
+            className={preference === theme ? "is-active" : ""}
+            key={theme}
+            onClick={(event) => {
+              onChange(theme);
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}
+          >
+            <i aria-hidden="true">{icons[theme]}</i>
+            <span>
+              <strong>{labels[theme]}</strong>
+              <small>
+                {theme === "system"
+                  ? "随设备明暗自动变化"
+                  : theme === "light"
+                    ? "明亮、清晰的学习桌面"
+                    : "低亮度的专注阅读环境"}
+              </small>
+            </span>
+            <em aria-hidden="true">{preference === theme ? "✓" : ""}</em>
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -2141,13 +2278,16 @@ function CourseDetailPage({
   project,
   onOpenSection,
   onEditOutline,
+  onProjectUpdate,
   onBack,
 }: {
   project: LearningProject;
   onOpenSection: (project: LearningProject, chapterId: string, sectionId: string) => void;
   onEditOutline: (project: LearningProject) => void;
+  onProjectUpdate: (project: LearningProject) => void;
   onBack: () => void;
 }) {
+  const { notify } = useToast();
   const currentPosition = getFirstCoursePosition(project);
   const totalSections = project.chapters.reduce(
     (count, chapter) => count + chapter.sections.length,
@@ -2187,8 +2327,53 @@ function CourseDetailPage({
         ? [project.chapters[0].id]
         : [];
   });
+  const [toolLibraryChapterId, setToolLibraryChapterId] = useState("");
+  const [toolLibraryLoadingChapterId, setToolLibraryLoadingChapterId] =
+    useState("");
+  const selectedToolChapter = project.chapters.find(
+    (chapter) => chapter.id === toolLibraryChapterId,
+  );
+
+  async function openChapterToolLibrary(
+    chapter: CourseChapter,
+    force = false,
+  ) {
+    if (chapter.toolLibrary && !force) {
+      setToolLibraryChapterId(chapter.id);
+      return;
+    }
+    if (toolLibraryLoadingChapterId) return;
+    setToolLibraryChapterId(chapter.id);
+    setToolLibraryLoadingChapterId(chapter.id);
+    try {
+      const result = await generateRemoteChapterToolLibrary(
+        project.id,
+        chapter.id,
+        force,
+      );
+      onProjectUpdate(result.project);
+      setToolLibraryChapterId(chapter.id);
+      if (result.warning) {
+        notify({
+          variant: "warning",
+          title: "本章工具已整理，部分资料未取得",
+          description: result.warning,
+        });
+      }
+    } catch (error) {
+      setToolLibraryChapterId("");
+      notify({
+        variant: "error",
+        title: "本章工具没有整理完成",
+        description: getErrorMessage(error),
+      });
+    } finally {
+      setToolLibraryLoadingChapterId("");
+    }
+  }
 
   return (
+    <>
     <main className="page course-hub">
       <header className="course-hub-hero">
         <div className="course-hub-nav">
@@ -2336,6 +2521,27 @@ function CourseDetailPage({
                   </summary>
 
                   <div className="course-roadmap-sections">
+                    <div className="course-roadmap-tools">
+                      <div>
+                        <small>本章工具</small>
+                        <strong>
+                          {chapter.toolLibrary
+                            ? "随时查公式、方法和使用边界"
+                            : "先根据整门课程和参考资料整理"}
+                        </strong>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={Boolean(toolLibraryLoadingChapterId)}
+                        onClick={() => openChapterToolLibrary(chapter)}
+                      >
+                        {toolLibraryLoadingChapterId === chapter.id
+                          ? "正在整理…"
+                          : chapter.toolLibrary
+                            ? "打开"
+                            : "开始整理"}
+                      </button>
+                    </div>
                     {chapter.sections.map((section, sectionIndex) => (
                       <button
                         type="button"
@@ -2494,6 +2700,316 @@ function CourseDetailPage({
         </aside>
       </div>
     </main>
+    <ChapterToolLibraryDrawer
+      chapterTitle={selectedToolChapter?.title ?? ""}
+      isLoading={
+        Boolean(toolLibraryChapterId) &&
+        toolLibraryLoadingChapterId === toolLibraryChapterId
+      }
+      isOpen={Boolean(toolLibraryChapterId)}
+      library={selectedToolChapter?.toolLibrary}
+      projectSources={project.sources ?? []}
+      onClose={() => setToolLibraryChapterId("")}
+      onRefresh={
+        selectedToolChapter
+          ? () => openChapterToolLibrary(selectedToolChapter, true)
+          : undefined
+      }
+    />
+    </>
+  );
+}
+
+function ChapterToolLibraryDrawer({
+  chapterTitle,
+  currentSectionId,
+  isLoading,
+  isOpen,
+  library,
+  projectSources,
+  onClose,
+  onRefresh,
+}: {
+  chapterTitle: string;
+  currentSectionId?: string;
+  isLoading: boolean;
+  isOpen: boolean;
+  library?: ChapterToolLibrary;
+  projectSources: LearningProject["sources"];
+  onClose: () => void;
+  onRefresh?: () => void;
+}) {
+  const sourceByUrl = new Map(
+    (projectSources ?? []).map((source) => [source.url, source]),
+  );
+  const currentItems =
+    library?.items.filter(
+      (item) =>
+        currentSectionId &&
+        (item.introducedInSectionId === currentSectionId ||
+          item.relatedSectionIds.includes(currentSectionId)),
+    ) ?? [];
+  const currentItemIds = new Set(currentItems.map((item) => item.id));
+  const displayGroups = currentSectionId
+    ? [
+        { id: "current", label: "本节正在用", items: currentItems },
+        {
+          id: "chapter",
+          label: "本章可以查",
+          items:
+            library?.items.filter(
+              (item) =>
+                item.placement !== "later-bridge" &&
+                !currentItemIds.has(item.id),
+            ) ?? [],
+        },
+        {
+          id: "later",
+          label: "后面会用到",
+          items:
+            library?.items.filter(
+              (item) => item.placement === "later-bridge",
+            ) ?? [],
+        },
+      ]
+    : (
+        [
+          "chapter-core",
+          "chapter-support",
+          "later-bridge",
+        ] as ChapterToolPlacement[]
+      ).map((placement) => ({
+        id: placement,
+        label: chapterToolPlacementLabels[placement],
+        items:
+          library?.items.filter((item) => item.placement === placement) ?? [],
+      }));
+
+  return (
+    <>
+      <button
+        className={`chapter-tools-backdrop ${isOpen ? "is-open" : ""}`}
+        aria-label="关闭本章工具"
+        tabIndex={isOpen ? 0 : -1}
+        onClick={onClose}
+      />
+      <aside
+        className={`chapter-tools-drawer ${isOpen ? "is-open" : ""}`}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
+      >
+        <header>
+          <div>
+            <small>本章工具</small>
+            <span>{chapterTitle}</span>
+            <h2>{library?.title ?? "正在整理…"}</h2>
+          </div>
+          <button className="icon-button" aria-label="关闭本章工具" onClick={onClose}>
+            ×
+          </button>
+        </header>
+
+        {isLoading || !library ? (
+          <div className="chapter-tools-loading">
+            <span aria-hidden="true" />
+            <strong>正在整理本章会反复用到的内容</strong>
+            <p>会检查课程位置、参考资料和后面的课堂，不需要停留在这里等待。</p>
+          </div>
+        ) : (
+          <div className="chapter-tools-scroll">
+            <p className="chapter-tools-scope">{library.scope}</p>
+            {displayGroups.map((group) => {
+              if (!group.items.length) return null;
+              return (
+                <section className="chapter-tools-group" key={group.id}>
+                  <h3>{group.label}</h3>
+                  <div>
+                    {group.items.map((item) => (
+                      <details className="chapter-tool-item" key={item.id}>
+                        <summary>
+                          <span>{item.title}</span>
+                          <small>{item.summary}</small>
+                          <i aria-hidden="true">＋</i>
+                        </summary>
+                        <div>
+                          <ul>
+                            {item.content.map((content, index) => (
+                              <li key={`${item.id}-content-${index}`}>
+                                <MathText value={content} />
+                              </li>
+                            ))}
+                          </ul>
+                          <dl>
+                            <div>
+                              <dt>什么时候用</dt>
+                              <dd><MathText value={item.useWhen} /></dd>
+                            </div>
+                            <div>
+                              <dt>注意什么</dt>
+                              <dd><MathText value={item.boundary} /></dd>
+                            </div>
+                          </dl>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+
+            {library.sourceRefs.length ? (
+              <details className="chapter-tools-sources">
+                <summary>整理时参考了什么</summary>
+                <div>
+                  {library.sourceRefs.flatMap((url) => {
+                    const source = sourceByUrl.get(url);
+                    return source
+                      ? [
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            key={source.url}
+                          >
+                            <span>{source.title}</span>
+                            <small>{getSourceHost(source.url)} ↗</small>
+                          </a>,
+                        ]
+                      : [];
+                  })}
+                </div>
+              </details>
+            ) : null}
+            <footer>
+              <span>
+                {library.generation.webSearchUsed
+                  ? "已结合外部资料整理"
+                  : "按课程内容整理"}
+              </span>
+              {onRefresh ? (
+                <button type="button" onClick={onRefresh}>
+                  重新整理
+                </button>
+              ) : null}
+            </footer>
+          </div>
+        )}
+      </aside>
+    </>
+  );
+}
+
+function LessonToolbookDrawer({
+  isOpen,
+  onClose,
+  sectionTitle,
+  toolbook,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  sectionTitle: string;
+  toolbook: NonNullable<LessonContent["toolbook"]>;
+}) {
+  const rememberCount = toolbook.items.filter(
+    (item) => item.tier === "remember",
+  ).length;
+
+  return (
+    <>
+      <button
+        className={`toolbook-backdrop ${isOpen ? "is-open" : ""}`}
+        aria-label="关闭本节工具簿"
+        tabIndex={isOpen ? 0 : -1}
+        onClick={onClose}
+      />
+      <aside
+        className={`lesson-toolbook ${isOpen ? "is-open" : ""}`}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
+      >
+        <header className="toolbook-header">
+          <div>
+            <span>SECTION FIELD NOTES</span>
+            <small>{sectionTitle}</small>
+            <h2>{toolbook.title}</h2>
+          </div>
+          <button
+            className="icon-button"
+            aria-label="关闭本节工具簿"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+
+        <div className="toolbook-scroll">
+          <section className="toolbook-scope">
+            <div>
+              <span>{String(toolbook.items.length).padStart(2, "0")}</span>
+              <small>项可查工具</small>
+            </div>
+            <p>{toolbook.scope}</p>
+          </section>
+
+          <div className="toolbook-index" aria-label="工具簿分类">
+            <span>
+              <strong>{rememberCount}</strong>
+              必须记住
+            </span>
+            <span>
+              <strong>{toolbook.items.length - rememberCount}</strong>
+              用时查阅
+            </span>
+          </div>
+
+          <div className="toolbook-list">
+            {toolbook.items.map((item, index) => (
+              <article
+                className={`toolbook-item toolbook-item--${item.tier}`}
+                key={`${item.title}-${index}`}
+              >
+                <header>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <small>
+                      {toolbookCategoryLabels[item.category]} ·{" "}
+                      {item.tier === "remember" ? "必须记住" : "用时查阅"}
+                    </small>
+                    <h3>{item.title}</h3>
+                  </div>
+                </header>
+                <ul>
+                  {item.content.map((entry, entryIndex) => (
+                    <li key={`${entry}-${entryIndex}`}>
+                      <MathText value={entry} />
+                    </li>
+                  ))}
+                </ul>
+                <dl>
+                  <div>
+                    <dt>什么时候用</dt>
+                    <dd>
+                      <MathText value={item.useWhen} />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>边界</dt>
+                    <dd>
+                      <MathText value={item.boundary} />
+                    </dd>
+                  </div>
+                </dl>
+              </article>
+            ))}
+          </div>
+
+          <footer className="toolbook-completeness">
+            <span>这份工具簿覆盖到哪里</span>
+            <p>{toolbook.completenessNote}</p>
+          </footer>
+        </div>
+      </aside>
+    </>
   );
 }
 
@@ -2538,6 +3054,8 @@ function ClassroomPage({
   const [isTutorThinking, setIsTutorThinking] = useState(false);
   const [activePhase, setActivePhase] = useState<LearningPhase>("orient");
   const [isCourseMapOpen, setIsCourseMapOpen] = useState(false);
+  const [isToolbookOpen, setIsToolbookOpen] = useState(false);
+  const [isChapterToolsLoading, setIsChapterToolsLoading] = useState(false);
   const [isCoachOpen, setIsCoachOpen] = useState(() =>
     typeof window === "undefined"
       ? true
@@ -2719,6 +3237,7 @@ function ClassroomPage({
     setTutorInput("");
     setActivePhase("orient");
     setVisitedPhases(["orient"]);
+    setIsToolbookOpen(false);
     setUnderstandingComplete(false);
     setProgressSaveState("idle");
     setPracticeResult("idle");
@@ -2800,6 +3319,20 @@ function ClassroomPage({
   }, [isCourseMapOpen]);
 
   useEffect(() => {
+    if (!isToolbookOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsToolbookOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isToolbookOpen]);
+
+  useEffect(() => {
     if (!isCoachOpen || !window.matchMedia("(max-width: 1280px)").matches) {
       return;
     }
@@ -2841,6 +3374,37 @@ function ClassroomPage({
       });
     } finally {
       if (lessonRequestId.current === requestId) setIsGenerating(false);
+    }
+  }
+
+  async function openChapterTools() {
+    setIsCoachOpen(false);
+    setIsCourseMapOpen(false);
+    setIsToolbookOpen(true);
+    if (chapter.toolLibrary || isChapterToolsLoading) return;
+    setIsChapterToolsLoading(true);
+    try {
+      const result = await generateRemoteChapterToolLibrary(
+        project.id,
+        chapter.id,
+      );
+      onProjectUpdate(result.project);
+      if (result.warning) {
+        notify({
+          variant: "warning",
+          title: "本章工具已整理，部分资料未取得",
+          description: result.warning,
+        });
+      }
+    } catch (error) {
+      setIsToolbookOpen(false);
+      notify({
+        variant: "error",
+        title: "本章工具没有整理完成",
+        description: getErrorMessage(error),
+      });
+    } finally {
+      setIsChapterToolsLoading(false);
     }
   }
 
@@ -3118,6 +3682,36 @@ function ClassroomPage({
         </div>
       </aside>
 
+      <ChapterToolLibraryDrawer
+        chapterTitle={chapter.title}
+        currentSectionId={section.id}
+        isLoading={isChapterToolsLoading}
+        isOpen={isToolbookOpen}
+        library={chapter.toolLibrary}
+        projectSources={project.sources ?? []}
+        onClose={() => setIsToolbookOpen(false)}
+        onRefresh={async () => {
+          if (isChapterToolsLoading) return;
+          setIsChapterToolsLoading(true);
+          try {
+            const result = await generateRemoteChapterToolLibrary(
+              project.id,
+              chapter.id,
+              true,
+            );
+            onProjectUpdate(result.project);
+          } catch (error) {
+            notify({
+              variant: "error",
+              title: "这次没有重新整理成功",
+              description: getErrorMessage(error),
+            });
+          } finally {
+            setIsChapterToolsLoading(false);
+          }
+        }}
+      />
+
       <div
         className={`classroom-layout classroom-layout--v3 ${isCoachOpen ? "" : "is-coach-closed"}`}
       >
@@ -3186,6 +3780,23 @@ function ClassroomPage({
                   <strong>{phaseProgress}%</strong>
                 </span>
               </div>
+              <button
+                className={`toolbook-open-button ${chapter.toolLibrary ? "" : "is-pending"}`}
+                disabled={isChapterToolsLoading}
+                onClick={openChapterTools}
+              >
+                <span>本章工具</span>
+                <strong>
+                  {isChapterToolsLoading
+                    ? "正在整理"
+                    : chapter.toolLibrary
+                      ? "按本节筛选"
+                      : "需要时整理"}
+                </strong>
+                <i aria-hidden="true">
+                  {chapter.toolLibrary ? "↗" : "＋"}
+                </i>
+              </button>
               <button
                 className="soft-pill"
                 disabled={isGenerating}
