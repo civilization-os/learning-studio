@@ -133,7 +133,13 @@ export const projectCreatorAgent: AgentDefinition = {
 6. 不输出解释、Markdown 或额外字段。`,
           },
         ],
-        { responseFormat: "json_object", temperature: 0.1 },
+        {
+          responseFormat: "json_object",
+          temperature: 0.1,
+          maxTokens: 1_500,
+          timeoutMs: 120_000,
+          maxInputCharacters: 24_000,
+        },
       );
       context.reportProgress?.({
         stage: "正在检查建议",
@@ -196,7 +202,13 @@ export const projectCreatorAgent: AgentDefinition = {
 7. 只输出一段描述，不使用 Markdown、标题、列表或额外说明。`,
           },
         ],
-        { responseFormat: "json_object", temperature: 0.25 },
+        {
+          responseFormat: "json_object",
+          temperature: 0.25,
+          maxTokens: 1_500,
+          timeoutMs: 120_000,
+          maxInputCharacters: 24_000,
+        },
       );
       context.reportProgress?.({
         stage: "正在检查描述",

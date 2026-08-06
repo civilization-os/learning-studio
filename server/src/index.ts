@@ -1,3 +1,9 @@
+import { db } from "./db/index.js";
+import { users, verificationCodes } from "./db/schema.js";
+import { hashPassword, comparePassword, generateToken, verifyToken } from "./auth.js";
+import crypto from "node:crypto";
+import { eq, or } from "drizzle-orm";
+import { sendRegistrationCode } from "./verification.js";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { listAgents, runAgent } from "./agents/index.js";
 import { createChapterToolLibraryFingerprint } from "./agents/chapterToolLibraryAgent.js";
@@ -8,8 +14,6 @@ import {
   isApiKeyPersisted,
   isWebSearchApiKeyPersisted,
   readStore,
-  setRuntimeApiKey,
-  setRuntimeWebSearchApiKey,
   writeStore,
 } from "./store.js";
 import {
@@ -49,7 +53,7 @@ const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST ?? "127.0.0.1";
 const maxBodyBytes = 1_000_000;
 const allowedOrigins = new Set(
-  (process.env.CORS_ORIGINS ?? "http://127.0.0.1:5173,http://localhost:5173")
+  (process.env.CORS_ORIGINS ?? "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:3000,http://localhost:3000,http://127.0.0.1:3001,http://localhost:3001")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
@@ -81,17 +85,25 @@ function sendJson(res: ServerResponse, status: number, data: unknown) {
   res.end(JSON.stringify(data));
 }
 
-function getRequestTaskId(req: IncomingMessage) {
+function getAuthenticatedUserId(req: IncomingMessage) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return undefined;
+  return verifyToken(authHeader.substring(7))?.userId;
+}
+
+function getRequestTaskId(req: IncomingMessage, userId: string) {
   const value = req.headers["x-generation-task-id"];
-  return typeof value === "string" && getGenerationTask(value)
+  const task = typeof value === "string" ? getGenerationTask(value) : undefined;
+  return typeof value === "string" && task?.userId === userId
     ? value
     : undefined;
 }
 
 function getRequestProgressReporter(
   req: IncomingMessage,
+  userId: string,
 ): ((progress: GenerationProgress) => void) | undefined {
-  const taskId = getRequestTaskId(req);
+  const taskId = getRequestTaskId(req, userId);
   if (!taskId) return undefined;
   return (progress) => {
     updateGenerationTask(taskId, {
@@ -101,7 +113,11 @@ function getRequestProgressReporter(
   };
 }
 
-function sendGenerationTaskEvents(req: IncomingMessage, res: ServerResponse) {
+function sendGenerationTaskEvents(
+  req: IncomingMessage,
+  res: ServerResponse,
+  userId: string,
+) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
@@ -109,9 +125,9 @@ function sendGenerationTaskEvents(req: IncomingMessage, res: ServerResponse) {
     "X-Accel-Buffering": "no",
   });
   res.write(
-    `event: snapshot\ndata: ${JSON.stringify({ tasks: listGenerationTasks() })}\n\n`,
+    `event: snapshot\ndata: ${JSON.stringify({ tasks: listGenerationTasks(userId) })}\n\n`,
   );
-  const unsubscribe = subscribeGenerationTasks((task) => {
+  const unsubscribe = subscribeGenerationTasks(userId, (task) => {
     res.write(`event: task\ndata: ${JSON.stringify(task)}\n\n`);
   });
   const keepAlive = setInterval(() => {
@@ -397,7 +413,7 @@ function isValidLessonContent(value: unknown): value is LessonContent {
       typeof toolbook.scope === "string" &&
       typeof toolbook.completenessNote === "string" &&
       Array.isArray(toolbook.items) &&
-      toolbook.items.length >= 2 &&
+      toolbook.items.length >= 1 &&
       toolbook.items.length <= 18 &&
       toolbook.items.every(
         (item) =>
@@ -413,8 +429,8 @@ function isValidLessonContent(value: unknown): value is LessonContent {
           ["remember", "lookup"].includes(item.tier) &&
           Array.isArray(item.content) &&
           item.content.every((entry) => typeof entry === "string") &&
-          typeof item.useWhen === "string" &&
-          typeof item.boundary === "string",
+          (item.useWhen === undefined || typeof item.useWhen === "string") &&
+          (item.boundary === undefined || typeof item.boundary === "string"),
       ));
   const learningDesignValid =
     learningDesign === undefined ||
@@ -459,12 +475,34 @@ function isValidLessonContent(value: unknown): value is LessonContent {
     Boolean(content.example) &&
     typeof content.example?.title === "string" &&
     Array.isArray(content.example.steps) &&
-    Boolean(content.exercise) &&
-    typeof content.exercise?.question === "string" &&
-    Array.isArray(content.exercise.options) &&
-    content.exercise.options.length === 4 &&
-    typeof content.exercise.answerIndex === "number" &&
-    typeof content.exercise.explanation === "string" &&
+    (content.interactiveDemos === undefined ||
+      (Array.isArray(content.interactiveDemos) &&
+        content.interactiveDemos.every(
+          (demo) =>
+            demo !== null &&
+            typeof demo === "object" &&
+            ["slider", "step-animation", "compare"].includes(
+              String((demo as { type?: unknown }).type),
+            ) &&
+            typeof (demo as { title?: unknown }).title === "string",
+        ))) &&
+    (Boolean(content.exercise) &&
+      typeof content.exercise?.question === "string" &&
+      Array.isArray(content.exercise.options) &&
+      content.exercise.options.length === 4 &&
+      typeof content.exercise.answerIndex === "number" &&
+      typeof content.exercise.explanation === "string" ||
+      Array.isArray(content.exercises) &&
+        content.exercises.length >= 1 &&
+        content.exercises.every(
+          (item) =>
+            item !== null &&
+            typeof item === "object" &&
+            ["single-choice", "true-false", "fill-blank", "calculation", "explanation"].includes(
+              String((item as { type?: unknown }).type),
+            ) &&
+            typeof (item as { question?: unknown }).question === "string",
+        )) &&
     learningDesignValid &&
     toolbookValid
   );
@@ -659,6 +697,16 @@ function isValidLessonProgress(value: unknown): value is LessonProgress {
           ) &&
           typeof item.lastSeenAt === "string" &&
           typeof item.nextReviewAt === "string" &&
+          (item.intervalDays === undefined ||
+            (typeof item.intervalDays === "number" &&
+              Number.isInteger(item.intervalDays) &&
+              item.intervalDays >= 0 &&
+              item.intervalDays <= 90)) &&
+          (item.reviewCount === undefined ||
+            (typeof item.reviewCount === "number" &&
+              Number.isInteger(item.reviewCount) &&
+              item.reviewCount >= 0 &&
+              item.reviewCount <= 1000)) &&
           (item.misconception === undefined ||
             (typeof item.misconception === "string" &&
               item.misconception.length <= 500)),
@@ -720,17 +768,201 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   const pathname = url.pathname;
+  let userId = "";
+
+  if (req.method === "POST" && pathname === "/api/auth/send-code") {
+    const body = await readJson<{ email?: unknown }>(req);
+    if (typeof body.email !== "string") {
+      throw new HttpError(400, "请输入有效的邮箱地址");
+    }
+    try {
+      const delivery = await sendRegistrationCode(body.email);
+      return sendJson(res, 200, {
+        message: "验证码已发送，请在 10 分钟内完成注册",
+        ...(delivery.devCode ? { devCode: delivery.devCode } : {}),
+      });
+    } catch (error) {
+      throw new HttpError(
+        error instanceof Error && error.message.includes("邮件服务") ? 503 : 400,
+        error instanceof Error ? error.message : "验证码发送失败",
+      );
+    }
+  }
+
+  if (req.method === "POST" && pathname === "/api/auth/register") {
+    const body = await readJson<{
+      username?: unknown;
+      password?: unknown;
+      email?: unknown;
+      code?: unknown;
+      avatar?: unknown;
+      nickname?: unknown;
+    }>(req);
+    if (
+      typeof body.username !== "string" ||
+      typeof body.password !== "string" ||
+      typeof body.email !== "string" ||
+      typeof body.code !== "string"
+    ) {
+      throw new HttpError(400, "注册信息不完整");
+    }
+
+    const username = body.username.trim();
+    const email = body.email.trim().toLowerCase();
+    const password = body.password;
+    const code = body.code.trim();
+    const avatar =
+      typeof body.avatar === "string" ? body.avatar.trim().slice(0, 32) : "🐶";
+    const nickname =
+      typeof body.nickname === "string" && body.nickname.trim()
+        ? body.nickname.trim().slice(0, 40)
+        : username;
+
+    if (!/^[\p{L}\p{N}_-]{3,32}$/u.test(username)) {
+      throw new HttpError(400, "用户名需为 3–32 位字母、数字、下划线或短横线");
+    }
+    if (password.length < 8 || password.length > 128) {
+      throw new HttpError(400, "密码长度需为 8–128 位");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new HttpError(400, "请输入有效的邮箱地址");
+    }
+
+    const record = db
+      .select()
+      .from(verificationCodes)
+      .where(eq(verificationCodes.email, email))
+      .get();
+    if (!record || record.code !== code || Date.now() > record.expiresAt.getTime()) {
+      throw new HttpError(400, "验证码错误或已过期");
+    }
+    const existing = db
+      .select({ id: users.id })
+      .from(users)
+      .where(or(eq(users.username, username), eq(users.email, email)))
+      .get();
+    if (existing) {
+      throw new HttpError(409, "用户名或邮箱已被注册");
+    }
+
+    const newUserId = `u_${crypto.randomBytes(8).toString("hex")}`;
+    const passwordHash = await hashPassword(password);
+    db.transaction((tx) => {
+      tx.insert(users)
+        .values({
+          id: newUserId,
+          username,
+          passwordHash,
+          email,
+          avatar,
+          nickname,
+          createdAt: new Date(),
+        })
+        .run();
+      tx.delete(verificationCodes)
+        .where(eq(verificationCodes.email, email))
+        .run();
+    });
+    const token = generateToken(newUserId);
+    return sendJson(res, 201, {
+      token,
+      userId: newUserId,
+      username,
+      nickname,
+      avatar,
+    });
+  }
+
+  if (req.method === "POST" && pathname === "/api/auth/login") {
+    const body = await readJson<{ username?: unknown; password?: unknown }>(req);
+    if (typeof body.username !== "string" || typeof body.password !== "string") {
+      throw new HttpError(400, "用户名或密码无效");
+    }
+    const username = body.username.trim();
+    const user = db.select().from(users).where(eq(users.username, username)).get();
+    if (!user || !(await comparePassword(body.password, user.passwordHash))) {
+      throw new HttpError(401, "用户名或密码错误");
+    }
+    const token = generateToken(user.id);
+    return sendJson(res, 200, {
+      token,
+      userId: user.id,
+      username: user.username,
+      nickname: user.nickname || user.username,
+      avatar: user.avatar,
+    });
+  }
+
+  if (
+    pathname.startsWith("/api/") &&
+    !pathname.startsWith("/api/auth/") &&
+    pathname !== "/api/health"
+  ) {
+    const authenticatedUserId = getAuthenticatedUserId(req);
+    if (!authenticatedUserId) {
+      return sendJson(res, 401, { error: "Token 无效或已过期" });
+    }
+    const userExists = db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, authenticatedUserId))
+      .get();
+    if (!userExists) {
+      return sendJson(res, 401, { error: "账号不存在或已停用" });
+    }
+    userId = authenticatedUserId;
+  }
+
+    if (req.method === "GET" && pathname === "/api/user/profile") {
+        const user = db.select().from(users).where(eq(users.id, userId)).get();
+        if (!user) return sendJson(res, 404, { error: "用户不存在" });
+        return sendJson(res, 200, {
+            userId: user.id,
+            username: user.username,
+            nickname: user.nickname || user.username,
+            avatar: user.avatar,
+            email: user.email,
+        });
+    }
+
+  if (req.method === "PUT" && pathname === "/api/user/profile") {
+    const body = await readJson<{ nickname?: unknown; avatar?: unknown }>(req);
+    const nickname =
+      typeof body.nickname === "string" ? body.nickname.trim() : undefined;
+    const avatar =
+      typeof body.avatar === "string" ? body.avatar.trim() : undefined;
+    if (nickname !== undefined && nickname.length > 40) {
+      throw new HttpError(400, "昵称不能超过 40 个字符");
+    }
+    if (avatar !== undefined && avatar.length > 32) {
+      throw new HttpError(400, "头像内容过长");
+    }
+    const updateData: Record<string, string> = {};
+    if (nickname !== undefined) updateData.nickname = nickname;
+    if (avatar !== undefined) updateData.avatar = avatar;
+    if (Object.keys(updateData).length > 0) {
+      db.update(users).set(updateData).where(eq(users.id, userId)).run();
+    }
+    const user = db.select().from(users).where(eq(users.id, userId)).get();
+    return sendJson(res, 200, {
+      userId: user?.id,
+      username: user?.username,
+      nickname: user?.nickname || user?.username,
+      avatar: user?.avatar,
+    });
+  }
+
 
   if (req.method === "GET" && pathname === "/api/health") {
     return sendJson(res, 200, { ok: true, service: "圆趣学习 TS 后端" });
   }
 
   if (req.method === "GET" && pathname === "/api/generation-tasks/events") {
-    return sendGenerationTaskEvents(req, res);
+    return sendGenerationTaskEvents(req, res, userId);
   }
 
   if (req.method === "GET" && pathname === "/api/generation-tasks") {
-    return sendJson(res, 200, { tasks: listGenerationTasks() });
+    return sendJson(res, 200, { tasks: listGenerationTasks(userId) });
   }
 
   if (req.method === "POST" && pathname === "/api/generation-tasks") {
@@ -762,6 +994,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       throw new HttpError(400, "生成任务信息不完整");
     }
     const task = createGenerationTask({
+      userId,
       type: body.type as GenerationTaskType,
       title: body.title,
       ...(typeof body.projectId === "string"
@@ -787,14 +1020,14 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       input?: Record<string, unknown>;
       projectId?: string;
     }>(req);
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     const result = await runAgent({
       agentName: body.agent,
       input: body.input ?? {},
       projectId: body.projectId,
       store,
-      reportProgress: getRequestProgressReporter(req),
+      reportProgress: getRequestProgressReporter(req, userId),
     });
     completeGenerationTask(taskId);
     return sendJson(res, 200, result);
@@ -809,8 +1042,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     ) {
       throw new HttpError(400, "课题名称需要包含 1–200 个字符");
     }
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     if (!store.aiSettings.apiKey) {
       throw new HttpError(400, "请先在设置中配置 DeepSeek API Key");
     }
@@ -826,7 +1059,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
           topic: body.topic.trim(),
         },
         store,
-        reportProgress: getRequestProgressReporter(req),
+        reportProgress: getRequestProgressReporter(req, userId),
       });
       if (
         typeof result.data.description !== "string" ||
@@ -865,8 +1098,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     ) {
       throw new HttpError(400, "内容描述格式无效");
     }
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     try {
       const result = await runAgent({
         agentName: "project-creator",
@@ -879,7 +1112,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
               : "",
         },
         store,
-        reportProgress: getRequestProgressReporter(req),
+        reportProgress: getRequestProgressReporter(req, userId),
       });
       const recommendations = result.data.recommendations;
       if (
@@ -903,7 +1136,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "GET" && pathname === "/api/projects") {
-    const store = await readStore();
+    const store = await readStore(userId);
     return sendJson(res, 200, { projects: store.projects });
   }
 
@@ -914,18 +1147,18 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (typeof title !== "string" || typeof description !== "string") {
       throw new HttpError(400, "项目标题和描述必须是字符串");
     }
-    const project = await createProject({ title, description });
+    const project = await createProject(userId, { title, description });
     return sendJson(res, 201, { project });
   }
 
   const projectId = getProjectId(pathname);
   if (req.method === "DELETE" && projectId) {
-    const deleted = await deleteProject(projectId);
+    const deleted = await deleteProject(userId, projectId);
     return sendJson(res, 200, { projectId, deleted });
   }
 
   if (req.method === "GET" && projectId) {
-    const store = await readStore();
+    const store = await readStore(userId);
     const project = store.projects.find((item) => item.id === projectId);
     return project ? sendJson(res, 200, { project }) : sendJson(res, 404, { error: "项目不存在" });
   }
@@ -936,11 +1169,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (!isValidOutline(body.chapters)) {
       throw new HttpError(400, "大纲至少需要一个章节，且每章至少需要一个小节");
     }
-    const store = await readStore();
+    const store = await readStore(userId);
     const project = store.projects.find((item) => item.id === outlineProjectId);
     if (!project) return sendJson(res, 404, { error: "项目不存在" });
     project.chapters = body.chapters;
-    await writeStore(store);
+    await writeStore(userId, store);
     return sendJson(res, 200, { project });
   }
 
@@ -949,8 +1182,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     const body = await readJson<{ mode?: unknown; preferences?: unknown }>(req);
     const mode = body.mode === "optimize" ? "optimize" : "generate";
     const preferences = parseOutlinePreferences(body.preferences);
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     const project = store.projects.find((item) => item.id === generateOutlineProjectId);
     if (!project) return sendJson(res, 404, { error: "项目不存在" });
     const result = await runAgent({
@@ -958,7 +1191,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       input: { mode, preferences },
       projectId: project.id,
       store,
-      reportProgress: getRequestProgressReporter(req),
+      reportProgress: getRequestProgressReporter(req, userId),
     });
     if (mode === "optimize") {
       if (!isValidOutlinePolishPatches(result.data.patches)) {
@@ -999,7 +1232,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         section.origin = "user";
         appliedCount += 1;
       }
-      await writeStore(store);
+      await writeStore(userId, store);
       completeGenerationTask(taskId, "新增节点已经整理完成");
       return sendJson(res, 200, {
         ...result,
@@ -1045,7 +1278,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         ? { warning: result.data.warning }
         : {}),
     };
-    await writeStore(store);
+    await writeStore(userId, store);
     if (result.data.fallbackUsed === true) {
       failGenerationTask(
         taskId,
@@ -1065,8 +1298,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   );
   if (req.method === "POST" && chapterToolRoute) {
     const body = await readJson<{ force?: unknown }>(req);
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     const project = store.projects.find(
       (item) => item.id === chapterToolRoute.projectId,
     );
@@ -1107,7 +1340,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         input: { chapterId: chapter.id },
         projectId: project.id,
         store,
-        reportProgress: getRequestProgressReporter(req),
+        reportProgress: getRequestProgressReporter(req, userId),
       });
       if (!isValidChapterToolLibrary(result.data.toolLibrary)) {
         throw new Error("本章工具整理结果结构不完整");
@@ -1123,7 +1356,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       }
       project.sources = Array.from(sourcesByUrl.values());
       chapter.toolLibrary = result.data.toolLibrary;
-      await writeStore(store);
+      await writeStore(userId, store);
       completeGenerationTask(taskId, "本章工具已经整理完成");
       return sendJson(res, 200, {
         project,
@@ -1145,8 +1378,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   const lessonRoute = getSectionRoute(pathname, "generate-content");
   if (req.method === "POST" && lessonRoute) {
     const body = await readJson<{ force?: unknown }>(req);
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     const project = store.projects.find(
       (item) => item.id === lessonRoute.projectId,
     );
@@ -1191,7 +1424,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         },
         projectId: project.id,
         store,
-        reportProgress: getRequestProgressReporter(req),
+        reportProgress: getRequestProgressReporter(req, userId),
       });
       const content = result.data.content;
       if (!isValidLessonContent(content)) {
@@ -1215,7 +1448,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         : [];
       section.sourceRefs = Array.from(new Set(sourceRefs));
       section.content = content;
-      await writeStore(store);
+      await writeStore(userId, store);
       completeGenerationTask(taskId, "课堂内容已经准备好");
       return sendJson(res, 200, {
         project,
@@ -1244,7 +1477,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       throw new HttpError(400, "学习记录格式不正确");
     }
 
-    const store = await readStore();
+    const store = await readStore(userId);
     const project = store.projects.find(
       (item) => item.id === progressRoute.projectId,
     );
@@ -1262,8 +1495,31 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       updatedAt: new Date().toISOString(),
     };
     section.learningProgress = progress;
+    const allProgress = project.chapters
+      .flatMap((chapter) => chapter.sections)
+      .map((item) => item.learningProgress)
+      .filter((item): item is LessonProgress => Boolean(item));
+    const answeredEvidence = allProgress
+      .flatMap((item) => Object.values(item.evidence))
+      .filter((item) => typeof item.correct === "boolean");
+    project.accuracy = answeredEvidence.length
+      ? Math.round(
+          (answeredEvidence.filter((item) => item.correct).length /
+            answeredEvidence.length) *
+            100,
+        )
+      : 0;
+    project.weakPoints = Array.from(
+      new Set(
+        allProgress.flatMap((item) =>
+          Object.values(item.knowledge ?? {})
+            .filter((knowledge) => knowledge.lastOutcome === "needs-review")
+            .map((knowledge) => knowledge.label),
+        ),
+      ),
+    ).slice(0, 20);
     project.lastStudied = "刚刚";
-    await writeStore(store);
+    await writeStore(userId, store);
     return sendJson(res, 200, { project, progress });
   }
 
@@ -1281,8 +1537,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       throw new HttpError(400, "请输入 1–2000 个字符的问题");
     }
 
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     const project = store.projects.find(
       (item) => item.id === tutorRoute.projectId,
     );
@@ -1311,7 +1567,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         },
         projectId: project.id,
         store,
-        reportProgress: getRequestProgressReporter(req),
+        reportProgress: getRequestProgressReporter(req, userId),
       });
       if (typeof result.data.answer !== "string" || !result.data.answer.trim()) {
         throw new Error("AI 助教未返回有效内容");
@@ -1337,7 +1593,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   const completeRoute = getSectionRoute(pathname, "complete");
   if (req.method === "POST" && completeRoute) {
-    const store = await readStore();
+    const store = await readStore(userId);
     const project = store.projects.find(
       (item) => item.id === completeRoute.projectId,
     );
@@ -1356,7 +1612,9 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       return sendJson(res, 404, { error: "学习小节不存在" });
     }
 
-    positions[currentIndex].section.status = "done";
+    const completedSection = positions[currentIndex].section;
+    const wasAlreadyCompleted = completedSection.status === "done";
+    completedSection.status = "done";
     positions.forEach((item) => {
       if (item.section.status === "current") item.section.status = "locked";
     });
@@ -1372,8 +1630,14 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       ? Math.round((completedCount / positions.length) * 100)
       : 0;
     project.pendingTasks = positions.length - completedCount;
+    if (!wasAlreadyCompleted) {
+      project.weeklyMinutes += Math.max(
+        1,
+        completedSection.estimatedMinutes ?? 20,
+      );
+    }
     project.lastStudied = "刚刚";
-    await writeStore(store);
+    await writeStore(userId, store);
 
     return sendJson(res, 200, {
       project,
@@ -1387,20 +1651,20 @@ async function route(req: IncomingMessage, res: ServerResponse) {
   }
 
   if (req.method === "GET" && pathname === "/api/settings/ai") {
-    const store = await readStore();
+    const store = await readStore(userId);
     const { apiKey: _apiKey, ...safeSettings } = store.aiSettings;
     return sendJson(res, 200, {
       settings: {
         ...safeSettings,
         apiKeyConfigured: Boolean(store.aiSettings.apiKey),
-        apiKeyPersisted: isApiKeyPersisted(),
+        apiKeyPersisted: isApiKeyPersisted(userId),
         keyProtection: getSecretProtectionStatus(),
       },
     });
   }
 
   if (req.method === "GET" && pathname === "/api/models") {
-    const store = await readStore();
+    const store = await readStore(userId);
     if (!store.aiSettings.apiKey) {
       throw new HttpError(400, "请先配置 DeepSeek API Key");
     }
@@ -1421,7 +1685,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       baseUrl?: unknown;
       apiKey?: unknown;
     }>(req);
-    const store = await readStore();
+    const store = await readStore(userId);
 
     if (body.modelName !== undefined) {
       if (!isValidModelName(body.modelName)) {
@@ -1444,30 +1708,29 @@ async function route(req: IncomingMessage, res: ServerResponse) {
           "当前系统未配置 APP_ENCRYPTION_KEY；请先配置 32 字节部署密钥，或通过 DEEPSEEK_API_KEY 环境变量提供密钥",
         );
       }
-      setRuntimeApiKey(body.apiKey);
       store.aiSettings.apiKey = body.apiKey.trim() || undefined;
     }
 
     store.aiSettings.provider = "DeepSeek";
-    await writeStore(store);
+    await writeStore(userId, store);
     const { apiKey: _apiKey, ...safeSettings } = store.aiSettings;
     return sendJson(res, 200, {
       settings: {
         ...safeSettings,
         apiKeyConfigured: Boolean(store.aiSettings.apiKey),
-        apiKeyPersisted: isApiKeyPersisted(),
+        apiKeyPersisted: isApiKeyPersisted(userId),
         keyProtection: getSecretProtectionStatus(),
       },
     });
   }
 
   if (req.method === "GET" && pathname === "/api/settings/search") {
-    const store = await readStore();
+    const store = await readStore(userId);
     return sendJson(res, 200, {
       settings: {
         provider: store.webSearchSettings.provider,
         apiKeyConfigured: Boolean(store.webSearchSettings.apiKey),
-        apiKeyPersisted: isWebSearchApiKeyPersisted(),
+        apiKeyPersisted: isWebSearchApiKeyPersisted(userId),
         keyProtection: getSecretProtectionStatus(),
       },
     });
@@ -1475,7 +1738,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
 
   if (req.method === "PUT" && pathname === "/api/settings/search") {
     const body = await readJson<{ apiKey?: unknown }>(req);
-    const store = await readStore();
+    const store = await readStore(userId);
 
     if (body.apiKey !== undefined) {
       if (typeof body.apiKey !== "string" || body.apiKey.length > 512) {
@@ -1487,32 +1750,31 @@ async function route(req: IncomingMessage, res: ServerResponse) {
           "当前系统未配置 APP_ENCRYPTION_KEY；请先配置 32 字节部署密钥，或通过 TAVILY_API_KEY 环境变量提供密钥",
         );
       }
-      setRuntimeWebSearchApiKey(body.apiKey);
       store.webSearchSettings.apiKey = body.apiKey.trim() || undefined;
     }
 
     store.webSearchSettings.provider = "Tavily";
-    await writeStore(store);
+    await writeStore(userId, store);
     return sendJson(res, 200, {
       settings: {
         provider: store.webSearchSettings.provider,
         apiKeyConfigured: Boolean(store.webSearchSettings.apiKey),
-        apiKeyPersisted: isWebSearchApiKeyPersisted(),
+        apiKeyPersisted: isWebSearchApiKeyPersisted(userId),
         keyProtection: getSecretProtectionStatus(),
       },
     });
   }
 
   if (req.method === "POST" && pathname === "/api/search/test") {
-    const store = await readStore();
+    const store = await readStore(userId);
     const result = await searchWeb(store.webSearchSettings, "Web Search API connection test");
     return sendJson(res, 200, result);
   }
 
   if (req.method === "POST" && pathname === "/api/ai/chat") {
     const body = await readJson<{ message: string; context?: string }>(req);
-    const store = await readStore();
-    const taskId = getRequestTaskId(req);
+    const store = await readStore(userId);
+    const taskId = getRequestTaskId(req, userId);
     updateGenerationTask(taskId, {
       status: "running",
       stage: "正在连接内容服务",
@@ -1542,11 +1804,21 @@ const server = createServer((req, res) => {
 
   route(req, res).catch((error: unknown) => {
     const status = error instanceof HttpError ? error.status : 500;
-    failGenerationTask(
-      getRequestTaskId(req),
-      error instanceof Error ? error.message : "服务端发生错误",
-    );
-    sendJson(res, status, { error: error instanceof Error ? error.message : "服务器错误" });
+    const requestUserId = getAuthenticatedUserId(req);
+    if (requestUserId) {
+      failGenerationTask(
+        getRequestTaskId(req, requestUserId),
+        error instanceof Error ? error.message : "服务端发生错误",
+      );
+    }
+    sendJson(res, status, {
+      error:
+        status >= 500 && !(error instanceof HttpError)
+          ? "服务器暂时无法处理请求"
+          : error instanceof Error
+            ? error.message
+            : "服务器错误",
+    });
   });
 });
 

@@ -1,0 +1,184 @@
+/* UI Foundation Components */
+
+/* Card */
+.ui-card {
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.ui-card__header {
+  padding: 1.5rem 1.5rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ui-card__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+
+.ui-card__description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.ui-card__content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Label */
+.ui-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+/* Input / Textarea */
+.ui-input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: var(--color-text);
+  background-color: var(--color-canvas);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ui-input:hover {
+  border-color: var(--color-accent);
+}
+
+.ui-input:focus-visible {
+  background-color: var(--color-surface);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-soft);
+}
+
+.ui-input::placeholder {
+  color: var(--color-text-quiet);
+}
+
+.ui-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* Button */
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  outline: none;
+  border: 1px solid transparent;
+  transition: background-color 0.15s ease-out, border-color 0.15s ease-out, color 0.15s ease-out, box-shadow 0.15s ease-out, transform 0.15s ease-out;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ui-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ui-button--default {
+  background-color: var(--color-action-fill);
+  color: var(--color-action-text);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
+.ui-button--default:hover:not(:disabled) {
+  background-color: var(--color-action-fill-hover);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 16%);
+  transform: translateY(-1px);
+}
+
+.ui-button--default:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 8%);
+}
+
+.ui-button--outline {
+  background-color: transparent;
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.ui-button--outline:hover:not(:disabled) {
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-text-muted);
+}
+
+.ui-button--ghost {
+  background-color: transparent;
+  color: var(--color-accent);
+}
+
+.ui-button--ghost:hover:not(:disabled) {
+  background-color: var(--color-surface-muted);
+  color: var(--color-accent-hover);
+}
+
+.ui-button--sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.ui-button:not(.ui-button--sm) {
+  padding: 0.625rem 1.25rem;
+}
+
+/* Badge */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 9999px;
+  background-color: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}
+
+.session-loading {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  text-align: center;
+  background: var(--color-canvas);
+}
+
+.session-loading h1,
+.session-loading p {
+  margin: 0;
+}
+
+.session-loading p {
+  color: var(--color-text-muted);
+}

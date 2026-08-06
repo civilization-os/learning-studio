@@ -70,6 +70,34 @@ main.classroom-page {
   color: var(--color-success);
 }
 
+.classroom-layout--v3 .learning-stage {
+  margin-top: 1.5rem;
+}
+
+.learning-stage {
+  scroll-margin-top: 180px;
+}
+
+.practice-brief dt {
+  color: rgba(255, 255, 255, 0.75) !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+}
+
+.practice-brief dd {
+  color: #ffffff !important;
+  font-size: 1rem !important;
+  font-weight: 800 !important;
+}
+
+.practice-brief dl div {
+  padding: 10px 14px !important;
+  border-radius: 12px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
 .classroom-layout--v3 .learning-stage,
 .lesson-scene,
 .practice-task,
@@ -83,6 +111,12 @@ main.classroom-page {
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: none;
+}
+
+.practice-brief {
+  background: linear-gradient(150deg, #162c3f, #1e3a5f) !important;
+  color: #ffffff !important;
+  border-radius: 20px !important;
 }
 
 .orient-core-card,
@@ -470,4 +504,451 @@ nav.lesson-nav {
   border-color: var(--color-border);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-2);
+}
+
+/* ---- 多题型练习 ---- */
+.practice-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.practice-progress-bar > i {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-surface-subtle);
+  overflow: hidden;
+}
+
+.practice-progress-bar > i > b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transition: width 0.25s ease;
+}
+
+.practice-text-input {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0 0;
+}
+
+.practice-text-input textarea,
+.practice-text-input input[type="text"] {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.practice-text-input textarea:focus,
+.practice-text-input input[type="text"]:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.practice-text-input input[type="text"]:disabled,
+.practice-text-input textarea:disabled {
+  opacity: 0.6;
+}
+
+.practice-reference-points {
+  border-left: 3px solid var(--color-warning);
+  background: var(--color-warning-surface);
+  border-radius: 0 12px 12px 0;
+  padding: 12px 14px;
+}
+
+.practice-reference-points > small {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-warning) 76%, var(--color-text));
+}
+
+.practice-reference-points ul {
+  margin: 8px 0 12px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.practice-self-check {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.stage-empty-hint {
+  padding: 24px;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ---- 交互演示 ---- */
+.interactive-demo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 18px 0;
+}
+
+.interactive-demo {
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  background: var(--color-surface-raised);
+  padding: 18px;
+  box-shadow: var(--shadow-1);
+}
+
+.interactive-demo-header {
+  margin-bottom: 14px;
+}
+
+.interactive-demo-header > span {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+  margin-bottom: 6px;
+}
+
+.interactive-demo-header h4 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.interactive-demo-header p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.interactive-demo-note {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.interactive-slider-plot {
+  border-radius: 12px;
+  background: var(--color-surface-subtle);
+  padding: 12px 12px 4px;
+}
+
+.interactive-slider-axis-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 8px;
+  font-size: 0.72rem;
+  color: var(--color-text-quiet);
+}
+
+.interactive-slider-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.interactive-slider-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.interactive-slider-control > span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+}
+
+.interactive-slider-control > span strong {
+  color: var(--color-text);
+}
+
+.interactive-slider-control > span em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.interactive-slider-control input[type="range"] {
+  width: 100%;
+  accent-color: var(--color-accent);
+}
+
+.interactive-step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.interactive-step-list li {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.interactive-step-list li > i {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent);
+}
+
+.interactive-step-list li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.interactive-step-list li strong {
+  color: var(--color-text);
+  font-size: 0.92rem;
+}
+
+.interactive-step-list li p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.interactive-step-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.interactive-step-actions > span {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.interactive-compare-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.interactive-compare-tabs button {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.interactive-compare-tabs button.is-active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.interactive-compare-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.interactive-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.interactive-compare-column {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+  padding: 14px;
+}
+
+.interactive-compare-column h5 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.interactive-compare-column .interactive-compare-list {
+  margin: 0;
+  padding-left: 16px;
+  gap: 6px;
+  font-size: 0.86rem;
+}
+
+/* ---- 闪卡预览弹窗 ---- */
+.flashcard-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(10 18 32 / 55%);
+  backdrop-filter: blur(6px);
+  animation: flashcard-overlay-in 200ms ease both;
+}
+
+@keyframes flashcard-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.flashcard-preview-dialog {
+  position: relative;
+  width: min(640px, 100%);
+  max-height: min(78vh, 720px);
+  overflow-y: auto;
+  border-radius: 20px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 24px 64px rgb(8 16 30 / 45%);
+  padding: 24px;
+  animation: flashcard-dialog-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+@keyframes flashcard-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.flashcard-preview-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.flashcard-preview-close:hover {
+  background: var(--color-danger-surface);
+  color: var(--color-danger);
+  transform: rotate(90deg);
+}
+
+.flashcard-preview-dialog > h4 {
+  margin: 0 0 18px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.flashcard-preview-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.flashcard-preview-front,
+.flashcard-preview-back {
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.flashcard-preview-front {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.flashcard-preview-back {
+  background: rgb(16 185 129 / 8%);
+  border: 1px solid rgb(16 185 129 / 45%);
+}
+
+.flashcard-preview-front > small,
+.flashcard-preview-back > small {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.flashcard-preview-front > small {
+  color: var(--color-accent);
+}
+
+.flashcard-preview-back > small {
+  color: #10b981;
+}
+
+.flashcard-preview-front > p,
+.flashcard-preview-back > p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+@media (min-width: 560px) {
+  .flashcard-preview-body {
+    grid-template-columns: 1fr 1fr;
+  }
 }

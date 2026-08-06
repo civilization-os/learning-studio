@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = dirname(dirname(fileURLToPath(import.meta.url)));
+try { process.loadEnvFile(join(rootDir, '.env')) } catch {}
 const checkOnly = process.argv.includes("--check");
 const backendUrl = "http://127.0.0.1:8787/api/health";
 const children = new Set();

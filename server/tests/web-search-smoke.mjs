@@ -1,16 +1,18 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import Database from "better-sqlite3";
 
 const providerPort = 18888;
 const appPort = 18787;
 const fallbackAppPort = 18786;
 const restartAppPort = 18785;
 const tempDir = await mkdtemp(join(tmpdir(), "learning-app-test-"));
-const storePath = join(tempDir, "store.json");
-const fallbackStorePath = join(tempDir, "fallback-store.json");
+const storePath = join(tempDir, "store.db");
+const fallbackStorePath = join(tempDir, "fallback-store.db");
+const jwtSecret = "web-search-smoke-test-jwt-secret";
 const generatedCourseAnalysis = {
   courseType: "项目实战",
   targetOutcome: "能够完成并验证一个实时数据处理流程",
@@ -61,7 +63,7 @@ const generatedOutline = {
     },
     {
       title: "掌握核心方法",
-      difficulty: 2,
+      difficulty: 3,
       objective: "使用核心方法解决结构化问题",
       prerequisites: ["核心术语", "运行环境"],
       estimatedHours: 7,
@@ -261,6 +263,17 @@ const generatedLessonContent = {
     explanation: "The output must be compared with explicit success criteria.",
   },
 };
+const invalidSceneLessonContent = {
+  ...generatedLessonContent,
+  scenes: generatedLessonContent.scenes.slice(1),
+};
+const wrongStrategyLessonContent = {
+  ...generatedLessonContent,
+  learningDesign: {
+    ...generatedLessonContent.learningDesign,
+    strategyMode: "academic",
+  },
+};
 const manualSectionId = "11111111-1111-4111-8111-111111111111";
 const generatedPolishPatches = {
   nodes: [
@@ -285,6 +298,7 @@ const generatedPreferenceRecommendations = {
 };
 let searchRequestCount = 0;
 let outlineRepairRequestCount = 0;
+let lessonRequestCount = 0;
 let lastTutorSystemPrompt = "";
 let lastLessonUserPrompt = "";
 
@@ -335,14 +349,22 @@ const providerServer = createServer(async (req, res) => {
     for await (const chunk of req) requestText += chunk;
     const requestBody = JSON.parse(requestText || "{}");
     const systemPrompt = String(requestBody.messages?.[0]?.content ?? "");
+    const userPrompt = String(requestBody.messages?.[1]?.content ?? "");
     if (systemPrompt.includes("AI 助教")) {
       lastTutorSystemPrompt = systemPrompt;
     }
     if (systemPrompt.includes("课程内容生成 Agent")) {
-      lastLessonUserPrompt = String(requestBody.messages?.[1]?.content ?? "");
+      lastLessonUserPrompt = userPrompt;
+      lessonRequestCount += 1;
     }
     const content = systemPrompt.includes("课程内容生成 Agent")
-      ? JSON.stringify(generatedLessonContent)
+      ? JSON.stringify(
+          lessonRequestCount === 1
+            ? invalidSceneLessonContent
+            : lessonRequestCount === 3
+              ? wrongStrategyLessonContent
+              : generatedLessonContent,
+        )
       : systemPrompt.includes("AI 助教")
         ? "这是结合当前小节内容生成的助教回答。"
         : systemPrompt.includes("固定选项")
@@ -388,7 +410,9 @@ const appProcess = spawn("node", ["server/dist/index.js"], {
   env: {
     ...process.env,
     PORT: String(appPort),
-    APP_STORE_PATH: storePath,
+    APP_DB_PATH: storePath,
+    JWT_SECRET: jwtSecret,
+    NODE_ENV: "test",
     DEEPSEEK_API_KEY: "",
     DEEPSEEK_BASE_URL: `http://127.0.0.1:${providerPort}`,
     TAVILY_API_KEY: "",
@@ -398,12 +422,14 @@ const appProcess = spawn("node", ["server/dist/index.js"], {
 });
 let fallbackProcess;
 let restartProcess;
+let authToken = "";
 
 async function request(path, init, port = appPort) {
   const response = await fetch(`http://127.0.0.1:${port}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...init?.headers,
     },
   });
@@ -412,6 +438,16 @@ async function request(path, init, port = appPort) {
     throw new Error(`${response.status}: ${JSON.stringify(body)}`);
   }
   return body;
+}
+
+async function stopProcess(child) {
+  if (!child || child.exitCode !== null) return;
+  const exited = new Promise((resolve) => child.once("exit", resolve));
+  child.kill();
+  await Promise.race([
+    exited,
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+  ]);
 }
 
 try {
@@ -426,6 +462,23 @@ try {
     }
   }
   if (!ready) throw new Error("backend did not become ready");
+
+  const codeDelivery = await request("/api/auth/send-code", {
+    method: "POST",
+    body: JSON.stringify({ email: "smoke@example.com" }),
+  });
+  if (!codeDelivery.devCode) throw new Error("expected a local test verification code");
+  const registration = await request("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({
+      username: "smoke-user",
+      password: "smoke-password-123",
+      email: "smoke@example.com",
+      code: codeDelivery.devCode,
+      avatar: "🧪",
+    }),
+  });
+  authToken = registration.token;
 
   const savedAiSettings = await request("/api/settings/ai", {
     method: "PUT",
@@ -536,8 +589,8 @@ try {
     throw new Error("expected repeated section titles across chapters to remain valid");
   }
   const difficulties = generated.project.chapters.map((chapter) => chapter.difficulty);
-  if (difficulties.join(",") !== "1,2,3,4,5") {
-    throw new Error("expected monotonically increasing difficulty");
+  if (difficulties.join(",") !== "1,3,3,4,5") {
+    throw new Error("expected model-provided chapter difficulty to be preserved");
   }
   if (!generated.project.outlineSummary?.courseGoal) {
     throw new Error("expected persisted course blueprint");
@@ -644,6 +697,9 @@ try {
     generatedLesson.content.learningDesign.methodPaths[0].boundary.length < 1
   ) {
     throw new Error("expected structured generated lesson content");
+  }
+  if (lessonRequestCount !== 2) {
+    throw new Error("expected invalid lesson scenes to trigger one repair request");
   }
   if (
     !lastLessonUserPrompt.includes("整门课程地图") ||
@@ -774,6 +830,20 @@ try {
     throw new Error("expected completed lesson progress to be persisted");
   }
 
+  const repairedStrategyLesson = await request(
+    `/api/projects/${encodeURIComponent(created.project.id)}/sections/${encodeURIComponent(lessonSection.id)}/generate-content`,
+    {
+      method: "POST",
+      body: JSON.stringify({ force: true }),
+    },
+  );
+  if (
+    repairedStrategyLesson.content.learningDesign.strategyMode !== "work" ||
+    lessonRequestCount !== 4
+  ) {
+    throw new Error("expected a mismatched lesson strategy to trigger repair");
+  }
+
   const disposableProject = await request("/api/projects", {
     method: "POST",
     body: JSON.stringify({
@@ -795,11 +865,20 @@ try {
     throw new Error("expected the project to be removed from persistent storage");
   }
 
-  const stored = await readFile(storePath, "utf8");
-  if (stored.includes("deepseek-test-key") || stored.includes("tavily-test-key")) {
+  const settingsDatabase = new Database(storePath, { readonly: true });
+  const storedSettings = settingsDatabase
+    .prepare("SELECT encrypted_secrets FROM user_settings LIMIT 1")
+    .get();
+  settingsDatabase.close();
+  const serializedSecrets = storedSettings?.encrypted_secrets ?? "";
+  if (serializedSecrets.includes("deepseek-test-key") || serializedSecrets.includes("tavily-test-key")) {
     throw new Error("API keys must not be persisted as plaintext");
   }
-  if (!stored.includes("windows-dpapi-current-user-v1")) {
+  const protectedSecrets = JSON.parse(serializedSecrets);
+  if (
+    protectedSecrets.deepSeekApiKey?.format !== "windows-dpapi-current-user-v1" ||
+    protectedSecrets.tavilyApiKey?.format !== "windows-dpapi-current-user-v1"
+  ) {
     throw new Error("expected a DPAPI-protected secrets record");
   }
 
@@ -808,7 +887,9 @@ try {
     env: {
       ...process.env,
       PORT: String(restartAppPort),
-      APP_STORE_PATH: storePath,
+      APP_DB_PATH: storePath,
+      JWT_SECRET: jwtSecret,
+      NODE_ENV: "test",
       DEEPSEEK_API_KEY: "",
       DEEPSEEK_BASE_URL: `http://127.0.0.1:${providerPort}`,
       TAVILY_API_KEY: "",
@@ -869,7 +950,9 @@ try {
     env: {
       ...process.env,
       PORT: String(fallbackAppPort),
-      APP_STORE_PATH: fallbackStorePath,
+      APP_DB_PATH: fallbackStorePath,
+      JWT_SECRET: jwtSecret,
+      NODE_ENV: "test",
       DEEPSEEK_API_KEY: "",
       TAVILY_API_KEY: "",
     },
@@ -887,6 +970,30 @@ try {
     }
   }
   if (!fallbackReady) throw new Error("fallback backend did not become ready");
+
+  const fallbackCodeDelivery = await request(
+    "/api/auth/send-code",
+    {
+      method: "POST",
+      body: JSON.stringify({ email: "fallback@example.com" }),
+    },
+    fallbackAppPort,
+  );
+  const fallbackRegistration = await request(
+    "/api/auth/register",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        username: "fallback-user",
+        password: "fallback-password-123",
+        email: "fallback@example.com",
+        code: fallbackCodeDelivery.devCode,
+        avatar: "🧪",
+      }),
+    },
+    fallbackAppPort,
+  );
+  authToken = fallbackRegistration.token;
 
   const fallbackCreated = await request(
     "/api/projects",
@@ -916,9 +1023,11 @@ try {
 
   console.log("web-search outline smoke test passed");
 } finally {
-  appProcess.kill();
-  fallbackProcess?.kill();
-  restartProcess?.kill();
+  await Promise.all([
+    stopProcess(appProcess),
+    stopProcess(fallbackProcess),
+    stopProcess(restartProcess),
+  ]);
   await new Promise((resolve) => providerServer.close(resolve));
   await rm(tempDir, { recursive: true, force: true });
 }

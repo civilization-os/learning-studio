@@ -9,6 +9,7 @@ html {
   min-height: 100%;
   background: var(--color-canvas);
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
@@ -22,7 +23,7 @@ body {
     radial-gradient(circle at 12% 4%, var(--color-canvas-blue), transparent 27rem),
     radial-gradient(circle at 92% 7%, var(--color-canvas-green), transparent 23rem),
     var(--color-canvas);
-  background-size: 40px 40px, 40px 40px, auto, auto, auto;
+  background-size: 56px 56px, 56px 56px, auto, auto, auto;
   transition:
     color 180ms ease,
     background-color 180ms ease;
@@ -64,6 +65,9 @@ h1,
 h2,
 h3 {
   color: var(--color-text);
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.025em;
   text-wrap: balance;
 }
 
@@ -80,6 +84,12 @@ select {
     border-color 160ms ease,
     box-shadow 160ms ease,
     background 160ms ease;
+}
+
+select,
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-text);
 }
 
 input::placeholder,
@@ -108,4 +118,19 @@ select:focus-visible,
 
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

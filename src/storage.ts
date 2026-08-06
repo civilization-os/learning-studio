@@ -1,14 +1,19 @@
 import { defaultState, StudyState } from "./studyAgent";
 
-const STORAGE_KEY = "learning-studio-state-v5";
+const STORAGE_KEY_PREFIX = "learning-studio-state-v6";
 
 function freshDefaultState(): StudyState {
   return structuredClone(defaultState);
 }
 
-export function loadStudyState(): StudyState {
+function getStorageKey(userId: string) {
+  return `${STORAGE_KEY_PREFIX}:${userId}`;
+}
+
+export function loadStudyState(userId?: string | null): StudyState {
+  if (!userId) return freshDefaultState();
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey(userId));
     if (!raw) return freshDefaultState();
 
     const saved = JSON.parse(raw) as Partial<StudyState>;
@@ -30,7 +35,8 @@ export function loadStudyState(): StudyState {
   }
 }
 
-export function saveStudyState(state: StudyState) {
+export function saveStudyState(userId: string | null | undefined, state: StudyState) {
+  if (!userId) return;
   const safeState: StudyState = {
     ...state,
     modelSettings: {
@@ -39,5 +45,5 @@ export function saveStudyState(state: StudyState) {
       webSearchApiKey: "",
     },
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(safeState));
+  localStorage.setItem(getStorageKey(userId), JSON.stringify(safeState));
 }
