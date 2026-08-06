@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import {
   buildChapterToolResearchQueries,
   createChapterToolLibraryFingerprint,
+  isConcreteChapterToolContent,
+  normaliseChapterToolContent,
 } from "../dist/agents/chapterToolLibraryAgent.js";
 
 function createProject() {
@@ -116,6 +118,55 @@ assert.ok(
 assert.ok(
   engineeringQueries.every((query) => !query.includes("泰勒")),
   "检索词应由课程内容推导，不能写死某个学科工具",
+);
+
+const groupedMathContent = normaliseChapterToolContent({
+  definition: "若极限存在，则极限值唯一。",
+  properties: ["局部有界性", "局部保号性"],
+  arithmetic: {
+    sum: "lim(f+g)=lim f+lim g",
+    product: "lim(fg)=lim f·lim g",
+  },
+});
+assert.ok(
+  groupedMathContent.length >= 5 &&
+    groupedMathContent.some((item) => item.includes("lim(f+g)")) &&
+    groupedMathContent.some((item) => item.includes("局部有界性")),
+  "数学工具内容按对象分组时也应保留公式和性质",
+);
+assert.deepEqual(
+  normaliseChapterToolContent("洛必达法则使用前必须先确认未定式类型。"),
+  ["洛必达法则使用前必须先确认未定式类型。"],
+  "单段实际内容也应转换为可查用条目",
+);
+assert.deepEqual(
+  normaliseChapterToolContent({ definition: "", properties: [] }),
+  [],
+  "真正没有内容的工具仍应被拒绝",
+);
+
+assert.equal(
+  isConcreteChapterToolContent(
+    ["能确定函数定义域、值域，判断有界性、单调性、周期性和奇偶性"],
+    ["能确定函数定义域、值域，判断有界性、单调性、周期性和奇偶性"],
+  ),
+  false,
+  "学习目标不能冒充工具书正文",
+);
+assert.equal(
+  isConcreteChapterToolContent([
+    "定义域：使函数表达式有意义的全部自变量取值组成的集合。",
+    "偶函数判定：定义域关于原点对称，且对任意 x 都有 f(-x)=f(x)。",
+  ]),
+  true,
+  "完整定义、判定条件和公式应被视为可直接查用的工具内容",
+);
+assert.equal(
+  isConcreteChapterToolContent([
+    "这是依据课程小节学习成果建立的基础条目，具体公式与条件以课堂讲解和参考资料为准。",
+  ]),
+  false,
+  "占位说明不能被视为工具书正文",
 );
 
 console.log("chapter tool library tests passed");

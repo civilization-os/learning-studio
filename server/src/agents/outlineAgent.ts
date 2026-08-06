@@ -369,10 +369,20 @@ function parseGeneratedOutline(
         ? Math.round(chapter.estimatedHours * 2) / 2
         : inferredChapterHours;
 
-    const difficulty = Math.min(
+    const inferredDifficulty = Math.min(
       5,
-      1 + Math.floor((chapterIndex * 4) / Math.max(1, parsed.chapters!.length - 1)),
+      1 +
+        Math.floor(
+          (chapterIndex * 4) / Math.max(1, parsed.chapters!.length - 1),
+        ),
     ) as 1 | 2 | 3 | 4 | 5;
+    const difficulty =
+      typeof chapter.difficulty === "number" &&
+      Number.isInteger(chapter.difficulty) &&
+      chapter.difficulty >= 1 &&
+      chapter.difficulty <= 5
+        ? (chapter.difficulty as 1 | 2 | 3 | 4 | 5)
+        : inferredDifficulty;
 
     return {
       id: `chapter-${timestamp}-${chapterIndex + 1}`,
@@ -478,6 +488,25 @@ function parseGeneratedOutline(
       }),
     };
   });
+
+  const expectedHours = plan?.estimatedHours ?? parsed.estimatedHours;
+  const allowedHoursDelta = Math.max(2, expectedHours * 0.2);
+  const declaredHoursDelta = Math.abs(parsed.estimatedHours - expectedHours);
+  if (declaredHoursDelta > allowedHoursDelta) {
+    throw new Error(
+      `课程总时长 ${parsed.estimatedHours} 小时与计划 ${expectedHours} 小时不一致`,
+    );
+  }
+
+  const chapterHours = chapters.reduce(
+    (total, chapter) => total + (chapter.estimatedHours ?? 0),
+    0,
+  );
+  if (Math.abs(chapterHours - expectedHours) > allowedHoursDelta) {
+    throw new Error(
+      `各章合计 ${chapterHours} 小时，无法解释课程计划 ${expectedHours} 小时`,
+    );
+  }
 
   return {
     chapters,
@@ -993,7 +1022,13 @@ ${formatCourseStrategyForPrompt(preliminaryStrategy)}
           },
           { role: "user", content: analysisPrompt },
         ],
-        { responseFormat: "json_object", temperature: 0.15 },
+        {
+          responseFormat: "json_object",
+          temperature: 0.15,
+          maxTokens: 2_500,
+          timeoutMs: 120_000,
+          maxInputCharacters: 40_000,
+        },
       );
       context.reportProgress?.({
         stage: "正在确定课程边界",
@@ -1091,7 +1126,13 @@ section.strategy 必须包含 role、whyNow、futureUses、successEvidence、dif
           },
           { role: "user", content: curriculumPrompt },
         ],
-        { responseFormat: "json_object", temperature: 0.2 },
+        {
+          responseFormat: "json_object",
+          temperature: 0.2,
+          maxTokens: 32_768,
+          timeoutMs: 300_000,
+          maxInputCharacters: 120_000,
+        },
       );
       let draftContent = draftResponse.content;
       let draft: ReturnType<typeof parseGeneratedOutline>;
@@ -1140,7 +1181,13 @@ ${JSON.stringify(outlinePlan)}
 ${draftContent.slice(0, 30_000)}`,
             },
           ],
-          { responseFormat: "json_object", temperature: 0.05 },
+          {
+            responseFormat: "json_object",
+            temperature: 0.05,
+            maxTokens: 32_768,
+            timeoutMs: 300_000,
+            maxInputCharacters: 120_000,
+          },
         );
         draftContent = repairResponse.content;
         draft = parseGeneratedOutline(
@@ -1211,7 +1258,13 @@ ${formatSources(research.sources).slice(0, 12_000)}
             },
             { role: "user", content: auditPrompt },
           ],
-          { responseFormat: "json_object", temperature: 0.1 },
+          {
+            responseFormat: "json_object",
+            temperature: 0.1,
+            maxTokens: 32_768,
+            timeoutMs: 300_000,
+            maxInputCharacters: 120_000,
+          },
         );
         finalOutline = parseGeneratedOutline(
           auditResponse.content,

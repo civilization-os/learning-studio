@@ -19,6 +19,10 @@
   .course-hub-sources {
     grid-column: 1 / -1;
   }
+
+  .home-dashboard-layout {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 @media (max-width: 760px) {

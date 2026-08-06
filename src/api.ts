@@ -41,6 +41,14 @@ export type RemoteModel = {
   ownedBy: string;
 };
 
+export type AuthResult = {
+  token: string;
+  userId: string;
+  username: string;
+  nickname?: string;
+  avatar: string;
+};
+
 type OutlineGenerationResponse = {
   project: LearningProject;
   summary: string;
@@ -90,18 +98,33 @@ export type GenerationTask = {
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem("app_token");
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...init?.headers,
       },
     });
   } catch {
     throw new Error("无法连接本地后端，请重新执行 npm.cmd run dev 后再试。");
   }
+
+  if (response.status === 401 && !path.startsWith("/auth/")) {
+    localStorage.removeItem("app_token");
+    localStorage.removeItem("app_username");
+    localStorage.removeItem("app_avatar");
+    localStorage.removeItem("app_nickname");
+    localStorage.removeItem("app_user_id");
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("auth_unauthorized"));
+    }
+    throw new Error("登录状态已失效，请重新登录");
+  }
+
   const data = (await response.json().catch(() => ({}))) as T & { error?: string };
 
   if (!response.ok) {
@@ -109,6 +132,61 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return data;
+}
+
+export async function loginRemote(username: string, password: string) {
+  const result = await apiRequest<AuthResult>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  localStorage.setItem("app_token", result.token);
+  localStorage.setItem("app_username", result.username || username);
+  localStorage.setItem("app_nickname", result.nickname || result.username || username);
+  localStorage.setItem("app_avatar", result.avatar);
+  localStorage.setItem("app_user_id", result.userId);
+  return result;
+}
+
+export async function sendVerificationCode(email: string) {
+  const result = await apiRequest<{ message: string; devCode?: string }>("/auth/send-code", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  return result;
+}
+
+export async function registerRemote(username: string, password: string, email: string, code: string, avatar: string, nickname?: string) {
+  const result = await apiRequest<AuthResult>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password, email, code, avatar, nickname }),
+  });
+  localStorage.setItem("app_token", result.token);
+  localStorage.setItem("app_username", result.username || username);
+  localStorage.setItem("app_nickname", result.nickname || result.username || username);
+  localStorage.setItem("app_avatar", result.avatar);
+  localStorage.setItem("app_user_id", result.userId);
+  return result;
+}
+
+export async function updateUserProfileRemote(input: { nickname?: string; avatar?: string }) {
+  const result = await apiRequest<{ userId: string; username: string; nickname: string; avatar: string }>("/user/profile", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  if (result.nickname) localStorage.setItem("app_nickname", result.nickname);
+  if (result.avatar) localStorage.setItem("app_avatar", result.avatar);
+  return result;
+}
+
+export function logoutLocal() {
+  localStorage.removeItem("app_token");
+  localStorage.removeItem("app_username");
+  localStorage.removeItem("app_avatar");
+  localStorage.removeItem("app_nickname");
+  localStorage.removeItem("app_user_id");
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("auth_logout"));
+  }
 }
 
 async function createGenerationTask(input: {
@@ -142,8 +220,8 @@ async function trackedApiRequest<T>(
   let generationTask: GenerationTask | undefined;
   try {
     generationTask = await createGenerationTask(task);
-  } catch {
-    // Keep compatibility with a server that has not restarted onto the new API yet.
+  } catch (err) {
+    console.error("Failed to create generation task:", err);
   }
   return apiRequest<T>(path, {
     ...init,
@@ -159,8 +237,13 @@ async function trackedApiRequest<T>(
 export function subscribeGenerationTasks(
   onTasks: (tasks: GenerationTask[]) => void,
 ) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("app_token") : null;
+  if (!token) {
+    onTasks([]);
+    return () => {};
+  }
   const tasks = new Map<string, GenerationTask>();
-  const source = new EventSource(`${API_BASE_URL}/generation-tasks/events`);
+
   const emit = () => {
     onTasks(
       Array.from(tasks.values()).sort((a, b) =>
@@ -168,28 +251,86 @@ export function subscribeGenerationTasks(
       ),
     );
   };
-  const handleSnapshot = (event: Event) => {
-    const payload = JSON.parse((event as MessageEvent<string>).data) as {
-      tasks?: GenerationTask[];
-    };
-    tasks.clear();
-    for (const task of payload.tasks ?? []) tasks.set(task.id, task);
-    emit();
+
+  // 1. Polling fallback for guaranteed task linkage
+  const poll = async () => {
+    try {
+      const res = await apiRequest<{ tasks: GenerationTask[] }>("/generation-tasks");
+      if (res && res.tasks) {
+        tasks.clear();
+        for (const t of res.tasks) tasks.set(t.id, t);
+        emit();
+      }
+    } catch {}
   };
-  const handleTask = (event: Event) => {
-    const task = JSON.parse(
-      (event as MessageEvent<string>).data,
-    ) as GenerationTask;
-    tasks.set(task.id, task);
-    emit();
+
+  poll();
+  const pollTimer = setInterval(poll, 2000);
+
+  // 2. Authenticated SSE stream. fetch is used because EventSource cannot set headers.
+  const streamController = new AbortController();
+  const handleStreamEvent = (block: string) => {
+    const eventName =
+      block
+        .split("\n")
+        .find((line) => line.startsWith("event:"))
+        ?.slice(6)
+        .trim() ?? "message";
+    const data = block
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n");
+    if (!data) return;
+    if (eventName === "snapshot") {
+      const payload = JSON.parse(data) as { tasks?: GenerationTask[] };
+      tasks.clear();
+      for (const task of payload.tasks ?? []) tasks.set(task.id, task);
+      emit();
+    } else if (eventName === "task") {
+      const task = JSON.parse(data) as GenerationTask;
+      tasks.set(task.id, task);
+      emit();
+    }
   };
-  source.addEventListener("snapshot", handleSnapshot);
-  source.addEventListener("task", handleTask);
+
+  const connectStream = async () => {
+    const response = await fetch(`${API_BASE_URL}/generation-tasks/events`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: streamController.signal,
+    });
+    if (!response.ok || !response.body) return;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (!streamController.signal.aborted) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      let boundary = buffer.indexOf("\n\n");
+      while (boundary >= 0) {
+        const block = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        handleStreamEvent(block);
+        boundary = buffer.indexOf("\n\n");
+      }
+    }
+  };
+  void connectStream().catch((error) => {
+    if (!streamController.signal.aborted) {
+      console.warn("生成任务实时连接失败，已保留轮询：", error);
+    }
+  });
+
   return () => {
-    source.removeEventListener("snapshot", handleSnapshot);
-    source.removeEventListener("task", handleTask);
-    source.close();
+    clearInterval(pollTimer);
+    streamController.abort();
   };
+}
+
+export async function getRemoteProjects(): Promise<LearningProject[]> {
+  const result = await apiRequest<{ projects: LearningProject[] }>("/projects");
+  return result.projects;
 }
 
 export async function createRemoteProject(input: {
@@ -369,7 +510,7 @@ export async function askRemoteTutor(
   message: string,
   history: TutorHistoryItem[],
   learningContext?: {
-    phase: "orient" | "understand" | "practice" | "reflect";
+    phase: "learn" | "practice" | "reflect";
     attempt: "idle" | "correct" | "incorrect";
     confidence: "uncertain" | "partial" | "ready" | null;
     scene?: TutorSceneContext;
@@ -405,6 +546,38 @@ export async function completeRemoteSection(
     `/projects/${encodeURIComponent(projectId)}/sections/${encodeURIComponent(sectionId)}/complete`,
     {
       method: "POST",
+    },
+  );
+}
+
+export async function generateRemoteVariantExercise(
+  projectId: string,
+  sectionId: string,
+  variantOf: unknown,
+): Promise<{
+  agent: string;
+  summary: string;
+  data: {
+    questions: import("./studyAgent").ExerciseItem[];
+    isVariant: boolean;
+    first: import("./studyAgent").ExerciseItem | null;
+  };
+}> {
+  return trackedApiRequest(
+    `/agents/run`,
+    {
+      type: "agent-run",
+      title: "生成同知识点变式题",
+      projectId,
+      sectionId,
+    },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        agent: "exercise",
+        projectId,
+        input: { sectionId, variantOf, count: 1 },
+      }),
     },
   );
 }

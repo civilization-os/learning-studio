@@ -11,7 +11,13 @@ async function fetchDeepSeek(
 ): Promise<Response> {
   try {
     return await fetch(url, init);
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "AbortError" || error.name === "TimeoutError")
+    ) {
+      throw new Error("内容服务响应超时，请稍后重试或缩小课程范围。");
+    }
     throw new Error(
       "无法连接内容服务，请检查网络和 DeepSeek 服务地址后再试。",
     );
@@ -63,6 +69,9 @@ export async function callDeepSeek(
   options?: {
     responseFormat?: "json_object";
     temperature?: number;
+    maxTokens?: number;
+    timeoutMs?: number;
+    maxInputCharacters?: number;
   },
 ) {
   if (!settings.apiKey) {
@@ -75,8 +84,32 @@ export async function callDeepSeek(
     throw new Error("尚未选择 DeepSeek 模型");
   }
 
+  const maxInputCharacters = Math.max(
+    4_000,
+    Math.min(200_000, options?.maxInputCharacters ?? 120_000),
+  );
+  const inputCharacters = messages.reduce(
+    (total, message) => total + message.content.length,
+    0,
+  );
+  if (inputCharacters > maxInputCharacters) {
+    throw new Error(
+      `课程上下文过长（${inputCharacters} 字符），请缩小课程范围后重试。`,
+    );
+  }
+
+  const maxTokens = Math.max(
+    256,
+    Math.min(65_536, Math.round(options?.maxTokens ?? 4_096)),
+  );
+  const timeoutMs = Math.max(
+    5_000,
+    Math.min(300_000, Math.round(options?.timeoutMs ?? 60_000)),
+  );
+
   const response = await fetchDeepSeek(`${settings.baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
+    signal: AbortSignal.timeout(timeoutMs),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${settings.apiKey}`,
@@ -85,6 +118,7 @@ export async function callDeepSeek(
       model: settings.modelName,
       messages,
       temperature: options?.temperature ?? 0.3,
+      max_tokens: maxTokens,
       ...(options?.responseFormat
         ? { response_format: { type: options.responseFormat } }
         : {}),
@@ -92,7 +126,7 @@ export async function callDeepSeek(
   });
 
   if (!response.ok) {
-    const text = await response.text();
+    const text = (await response.text()).slice(0, 1_000);
     throw new Error(`DeepSeek request failed: ${response.status} ${text}`);
   }
 

@@ -12,7 +12,7 @@ type TutorHistoryItem = {
 };
 
 type TutorLearningContext = {
-  phase: "orient" | "understand" | "practice" | "reflect";
+  phase: "learn" | "practice" | "reflect";
   attempt: "idle" | "correct" | "incorrect";
   confidence: "uncertain" | "partial" | "ready" | null;
   scene: {
@@ -26,11 +26,11 @@ function normaliseLearningContext(value: unknown): TutorLearningContext {
     value !== null && typeof value === "object"
       ? (value as Record<string, unknown>)
       : {};
-  const phase = ["orient", "understand", "practice", "reflect"].includes(
+  const phase = ["learn", "practice", "reflect"].includes(
     String(input.phase),
   )
     ? (String(input.phase) as TutorLearningContext["phase"])
-    : "understand";
+    : "learn";
   const attempt = ["idle", "correct", "incorrect"].includes(
     String(input.attempt),
   )
@@ -113,9 +113,8 @@ export const tutorAgent: AgentDefinition = {
     const history = normaliseHistory(input.history);
     const learningContext = normaliseLearningContext(input.learningContext);
     const phaseLabels = {
-      orient: "定位知识关系",
-      understand: "理解核心机制",
-      practice: "主动应用",
+      learn: "学习本节内容",
+      practice: "主动应用做题",
       reflect: "收束与反思",
     };
     const attemptLabels = {
@@ -136,12 +135,14 @@ export const tutorAgent: AgentDefinition = {
           mindMap: section.content.mindMap,
           explanation: section.content.explanation,
           example: section.content.example,
-          exercise: {
-            question: section.content.exercise.question,
-            options: section.content.exercise.options,
-            answerIndex: section.content.exercise.answerIndex,
-            explanation: section.content.exercise.explanation,
-          },
+          exercise: section.content.exercise
+            ? {
+                question: section.content.exercise.question,
+                options: section.content.exercise.options,
+                answerIndex: section.content.exercise.answerIndex,
+                explanation: section.content.exercise.explanation,
+              }
+            : section.content.exercises?.[0] ?? null,
         })
       : "本节课程内容尚未生成";
     const courseStrategy =
@@ -246,7 +247,12 @@ ${formatTutorStrategyForPrompt(courseStrategy)}
         ...history,
         { role: "user", content: message },
       ],
-      { temperature: 0.35 },
+      {
+        temperature: 0.35,
+        maxTokens: 2_500,
+        timeoutMs: 120_000,
+        maxInputCharacters: 80_000,
+      },
     );
     if (response.mocked) {
       throw new Error("DeepSeek 尚未完成配置");

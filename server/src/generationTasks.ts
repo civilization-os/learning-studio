@@ -21,6 +21,7 @@ export type GenerationTaskStatus =
 
 export type GenerationTask = {
   id: string;
+  userId: string;
   type: GenerationTaskType;
   title: string;
   projectId?: string;
@@ -69,15 +70,31 @@ function trimHistory() {
 }
 
 export function createGenerationTask(input: {
+  userId: string;
   type: GenerationTaskType;
   title: string;
   projectId?: string;
   chapterId?: string;
   sectionId?: string;
 }): GenerationTask {
+  // Deduplicate active tasks for the same target
+  const existingActive = Array.from(tasks.values()).find(
+    (t) =>
+      (t.status === "running" || t.status === "queued") &&
+      t.userId === input.userId &&
+      t.type === input.type &&
+      t.projectId === input.projectId &&
+      t.chapterId === input.chapterId &&
+      t.sectionId === input.sectionId,
+  );
+  if (existingActive) {
+    return existingActive;
+  }
+
   const now = new Date().toISOString();
   const task: GenerationTask = {
     id: createId(),
+    userId: input.userId,
     type: input.type,
     title: input.title.trim().slice(0, 120) || "准备内容",
     ...(input.projectId ? { projectId: input.projectId } : {}),
@@ -99,8 +116,8 @@ export function getGenerationTask(taskId: string | undefined) {
   return taskId ? tasks.get(taskId) : undefined;
 }
 
-export function listGenerationTasks() {
-  return Array.from(tasks.values()).sort((a, b) =>
+export function listGenerationTasks(userId: string) {
+  return Array.from(tasks.values()).filter((task) => task.userId === userId).sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   );
 }
@@ -170,7 +187,10 @@ export function failGenerationTask(
   return task;
 }
 
-export function subscribeGenerationTasks(listener: TaskListener) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+export function subscribeGenerationTasks(userId: string, listener: TaskListener) {
+  const scopedListener: TaskListener = (task) => {
+    if (task.userId === userId) listener(task);
+  };
+  listeners.add(scopedListener);
+  return () => listeners.delete(scopedListener);
 }

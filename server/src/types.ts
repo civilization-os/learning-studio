@@ -138,6 +138,10 @@ export type LessonKnowledgeState = {
   misconception?: string;
   lastSeenAt: string;
   nextReviewAt: string;
+  /** SM-2 简化：当前间隔天数（1/3/7/15/30） */
+  intervalDays?: number;
+  /** 已连续答对推进的复习次数 */
+  reviewCount?: number;
 };
 
 export type LessonReflection = {
@@ -168,8 +172,8 @@ export type LessonToolbookItem = {
     | "reference";
   tier: "remember" | "lookup";
   content: string[];
-  useWhen: string;
-  boundary: string;
+  useWhen?: string;
+  boundary?: string;
 };
 
 export type LessonToolbook = {
@@ -235,6 +239,97 @@ export type ChapterToolLibrary = {
   };
 };
 
+export type VisualElementFormat =
+  | "latex"
+  | "mermaid"
+  | "code"
+  | "table"
+  | "flashcard";
+
+export type VisualElement = {
+  format: VisualElementFormat;
+  caption?: string;
+  content: string;
+  language?: string;
+};
+
+export type InteractiveDemoType = "slider" | "step-animation" | "compare";
+
+export type InteractiveSliderParam = {
+  name: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  initial: number;
+};
+
+/**
+ * 可交互演示块（学科中立，渲染器只认类型不认学科）：
+ * - slider: 可拖参数改变曲线的图形（如函数/趋势/模型），参数变化实时重绘
+ * - step-animation: 步骤推进动画（推导、流程、时间线、过程）
+ * - compare: 对照/切换（概念对比、方案对比、对象属性对比）
+ */
+export type InteractiveDemo =
+  | {
+      type: "slider";
+      title: string;
+      instruction: string;
+      /** 函数表达式，支持 x 与 params 中的参数名，如 a*x^2 + b*x + c */
+      expression: string;
+      xLabel?: string;
+      yLabel?: string;
+      xMin: number;
+      xMax: number;
+      yMin?: number;
+      yMax?: number;
+      params: InteractiveSliderParam[];
+      note?: string;
+    }
+  | {
+      type: "step-animation";
+      title: string;
+      instruction?: string;
+      steps: Array<{ title: string; body: string }>;
+    }
+  | {
+      type: "compare";
+      title: string;
+      instruction?: string;
+      columns: Array<{ label: string; items: string[] }>;
+    };
+
+export type ExerciseType =
+  | "single-choice"
+  | "true-false"
+  | "fill-blank"
+  | "calculation"
+  | "explanation";
+
+/**
+ * 多题型练习。字段按 type 取用：
+ * - single-choice: options(4) + answerIndex
+ * - true-false: answer(boolean)
+ * - fill-blank: acceptedAnswers（关键词/答案列表，忽略大小写匹配）
+ * - calculation: acceptedResult（结果及等价写法，忽略大小写与空白匹配）
+ * - explanation: referencePoints（判分参考要点）
+ */
+export type ExerciseItem = {
+  type: ExerciseType;
+  knowledgePoint: string;
+  purpose?: string;
+  difficultyFocus?: string;
+  question: string;
+  options?: string[];
+  answerIndex?: number;
+  answer?: boolean;
+  acceptedAnswers?: string[];
+  acceptedResult?: string[];
+  referencePoints?: string[];
+  transferPrompt?: string;
+  explanation?: string;
+};
+
 export type LessonContent = {
   generatedAt: string;
   modelName: string;
@@ -248,6 +343,8 @@ export type LessonContent = {
   learningDesign?: LessonLearningDesign;
   toolbook?: LessonToolbook;
   overview: string;
+  visualElements?: VisualElement[];
+  interactiveDemos?: InteractiveDemo[];
   scenes?: LessonScene[];
   mindMap: {
     center: string;
@@ -268,12 +365,14 @@ export type LessonContent = {
     result: string;
     code?: string;
   };
-  exercise: {
+  /** 兼容旧数据的单题（单选）；新内容优先使用 exercises */
+  exercise?: {
     question: string;
     options: string[];
     answerIndex: number;
     explanation: string;
   };
+  exercises?: ExerciseItem[];
 };
 
 export type CourseChapter = {
