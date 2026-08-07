@@ -2,8 +2,8 @@
 
 FROM node:22-alpine AS source
 WORKDIR /app
-# better-sqlite3@13 在 alpine(musl)无预编译二进制,需要源码编译
-RUN apk add --no-cache python3 make g++
+# better-sqlite3@13 的 npm 包自带全平台预编译二进制(含 linuxmusl),
+# npm ci 不会触发源码编译,无需安装 python3/make/g++ 等编译工具
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
