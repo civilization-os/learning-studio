@@ -2,6 +2,8 @@ name: learning-studio
 
 services:
   backend:
+    # 双模式:本地开发/构建用 build;CI 发布后可 APP_VERSION=vX.Y.Z docker compose pull 拉取现成镜像
+    image: ghcr.io/civilization-os/learning-studio/backend:${APP_VERSION:-latest}
     build:
       context: .
       target: backend
@@ -43,6 +45,7 @@ services:
       start_period: 10s
 
   web:
+    image: ghcr.io/civilization-os/learning-studio/web:${APP_VERSION:-latest}
     build:
       context: .
       target: web

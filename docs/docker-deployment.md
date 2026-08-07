@@ -84,6 +84,37 @@ Restart after changing values:
 docker compose up -d
 ```
 
+## CI release & fast deployment (optional, recommended)
+
+Pushing a `v*` tag triggers GitHub Actions to build **linux/amd64 + linux/arm64** images, publish them to GitHub Container Registry (GHCR), and create a Release. Deployment machines then pull prebuilt images instead of building locally (no `npm ci` + compile time — seconds instead of minutes).
+
+Release a new version:
+
+```bash
+npm version 0.4.1          # bump package.json version
+git push origin your-branch # commit code (after merging into main)
+git tag v0.4.1              # tag must start with v
+git push origin v0.4.1      # triggers the workflow
+```
+
+When the workflow finishes (watch the Actions tab), deploy quickly:
+
+```bash
+APP_VERSION=v0.4.1 docker compose pull
+APP_VERSION=v0.4.1 docker compose up -d
+```
+
+Or keep building locally (default `APP_VERSION=latest`):
+
+```bash
+docker compose up -d --build
+```
+
+Notes:
+
+- GHCR image visibility follows the repository: public repos can be pulled directly; private repos require `docker login ghcr.io -u <user> -p <PAT>` on the deploy machine (PAT needs `read:packages`).
+- The multi-arch image is a single manifest — x86 and ARM machines each pull the matching layer automatically; no separate builds per OS.
+
 ## Network exposure
 
 The safe default binds the app to `127.0.0.1`. To serve it from another machine, set these values in `.env`:

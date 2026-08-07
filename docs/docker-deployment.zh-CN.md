@@ -91,6 +91,37 @@ MAIL_ECHO_CODE=false
 docker compose up -d
 ```
 
+## CI 发布与快速部署（可选，推荐）
+
+推送 `v*` tag 后，GitHub Actions 会自动构建 **linux/amd64 + linux/arm64** 两个架构的镜像，推送到 GitHub Container Registry（GHCR），并创建 Release。部署机直接拉取现成镜像，**不用在服务器上本地构建**（省掉 npm ci + 编译时间，秒级部署）。
+
+发布新版本：
+
+```bash
+npm version 0.4.1          # 更新 package.json 版本号
+git push origin 你的分支     # 提交代码（合并进 main 后）
+git tag v0.4.1              # tag 名必须带 v 前缀
+git push origin v0.4.1      # 触发 workflow
+```
+
+workflow 完成后（可在仓库 Actions 页查看进度），部署机快速部署：
+
+```bash
+APP_VERSION=v0.4.1 docker compose pull
+APP_VERSION=v0.4.1 docker compose up -d
+```
+
+也可以继续用本地构建的方式（不指定 `APP_VERSION`，默认 `latest`）：
+
+```bash
+docker compose up -d --build
+```
+
+注意：
+
+- GHCR 镜像的可见性跟随仓库：公开仓库的镜像可直接拉取；私有仓库需要在部署机执行 `docker login ghcr.io -u <用户名> -p <PAT>`（PAT 需 `read:packages` 权限）。
+- 多架构镜像是同一份镜像，部署机（x86 或 ARM）会自动拉取匹配自己架构的层，无需区分系统。
+
 ## 2. 启动
 
 ```bash
