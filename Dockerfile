@@ -2,6 +2,8 @@
 
 FROM node:22-alpine AS source
 WORKDIR /app
+# better-sqlite3@13 在 alpine(musl)无预编译二进制,需要源码编译
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
@@ -17,8 +19,11 @@ WORKDIR /app
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8787 \
-    APP_STORE_PATH=/app/data/store.json
+    APP_STORE_PATH=/app/data/store.json \
+    APP_DB_PATH=/app/data/learning-studio.db
 COPY --from=backend-build /app/server/dist ./server/dist
+# 运行时依赖 node_modules(ESM import drizzle-orm 等),否则 ERR_MODULE_NOT_FOUND
+COPY --from=backend-build /app/node_modules ./node_modules
 RUN mkdir -p /app/data && chown -R node:node /app
 USER node
 EXPOSE 8787

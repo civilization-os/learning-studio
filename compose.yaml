@@ -9,11 +9,23 @@ services:
       HOST: 0.0.0.0
       PORT: 8787
       APP_STORE_PATH: /app/data/store.json
+      APP_DB_PATH: ${APP_DB_PATH:-/app/data/learning-studio.db}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?Set APP_ENCRYPTION_KEY in .env before starting}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       TAVILY_API_URL: ${TAVILY_API_URL:-https://api.tavily.com/search}
+      # 邮件(SMTP)配置。发件邮箱可以是假的/测试 SMTP 站点,邮件进入垃圾箱不影响功能。
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # 连接无有效证书的假 SMTP 站点(如自建 Mailpit/MailHog)时设为 true
+      SMTP_ALLOW_INSECURE_TLS: ${SMTP_ALLOW_INSECURE_TLS:-false}
+      # 未配置 SMTP 时把验证码回显到页面/日志(测试用),生产对外服务不建议开启
+      MAIL_ECHO_CODE: ${MAIL_ECHO_CODE:-false}
     volumes:
       - learning-studio-data:/app/data
     expose:

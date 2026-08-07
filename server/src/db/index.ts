@@ -1,15 +1,17 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import * as schema from "./schema.js";
 import { mkdirSync } from "node:fs";
 
-const rootDir = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-const dataDir = join(rootDir, "data");
+// 数据目录解析:
+// - APP_DB_PATH 显式指定时优先(部署时推荐,容器内指向数据卷 /app/data)
+// - 否则取进程工作目录下的 data/(容器内 WORKDIR=/app → /app/data;本地开发为项目根/data)
+// 注意:不要用 import.meta.url 向上推导——编译后文件深度会变,容易落错目录。
+const dataDir = join(process.cwd(), "data");
 mkdirSync(dataDir, { recursive: true });
 
-const dbPath = process.env.APP_DB_PATH ?? join(dataDir, "learning-studio.db");
+const dbPath = process.env.APP_DB_PATH?.trim() || join(dataDir, "learning-studio.db");
 export const sqlite = new Database(dbPath);
 
 sqlite.pragma("foreign_keys = ON");

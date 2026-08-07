@@ -6,6 +6,7 @@ output/
 .env
 .env.*
 server/data/
+data/
 
 # Reasonix tool state
 .reasonix/

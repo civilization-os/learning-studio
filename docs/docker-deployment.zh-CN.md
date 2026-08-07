@@ -39,7 +39,57 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 - 请存入密码管理器或服务器密钥管理服务。
 - 丢失后，已保存的 DeepSeek/Tavily 密钥无法恢复，只能重新填写。
 
+同时生成并填写登录令牌签名密钥（**生产环境必填**，缺失后端会启动失败）：
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+```
+
+把输出写入 `.env` 的 `JWT_SECRET`。
+
 DeepSeek 和 Tavily 密钥可以留空，部署后在应用“设置”页面填写；也可以直接写入服务器环境变量。
+
+## 旧版数据迁移（store.json → SQLite）
+
+新版本改用 SQLite 存储。如果是从旧版本升级，且旧数据还在 `server/data/store.json`（或你自定义的 `APP_STORE_PATH`），升级后第一次注册的账号会自动继承这些数据（项目、AI/搜索设置、已加密的 API Key），`store.json` 会被重命名为 `store.json.migrated`。
+
+如果旧数据应归某个**已存在**的账号，请手动迁移：
+
+```bash
+npm run server:build
+node scripts/migrate-store.mjs --email user@example.com
+# 或按用户名: node scripts/migrate-store.mjs --username alice
+```
+
+## 邮件验证码（SMTP）配置
+
+注册验证码通过 SMTP 发送，全部可选。不配置时，生产环境发送验证码会返回“邮件服务尚未配置”。
+
+在 `.env` 中配置：
+
+```dotenv
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+SMTP_ALLOW_INSECURE_TLS=false
+MAIL_ECHO_CODE=false
+```
+
+- `SMTP_HOST`：SMTP 服务器地址。**不要求是 163/QQ 等正规邮箱服务**，自建 Mailpit / MailHog / smtp4dev 等假邮箱站点、或任意外部 SMTP 都可以，只要地址和端口可达。
+- `SMTP_SECURE`：465 端口或使用 SSL 时设为 `true`。
+- `SMTP_USER` / `SMTP_PASSWORD`：发件账号；无认证的假 SMTP 站点可留空。
+- `SMTP_FROM`：发件人显示地址（如 `noreply@your-domain.com`），可以是**不存在的假地址**——邮件被接收方归入垃圾邮件不影响功能。
+- `SMTP_ALLOW_INSECURE_TLS`：连接自签证书/无有效证书的假 SMTP 站点时设为 `true`，跳过证书校验。
+- `MAIL_ECHO_CODE`：测试用开关。完全没有 SMTP 时设为 `true`，验证码会直接回显在页面上并写入后端日志（等同本地开发模式），适合临时部署验证；生产对外服务不建议开启。
+
+修改后重新启动生效：
+
+```bash
+docker compose up -d
+```
 
 ## 2. 启动
 
