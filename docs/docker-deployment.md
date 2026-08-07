@@ -28,7 +28,7 @@ Put that output in `.env` as `JWT_SECRET`, then run:
 docker compose up -d --build
 ```
 
-Open `http://127.0.0.1:8080`.
+Open `https://127.0.0.1:8443` (a self-signed certificate is bundled; the browser will warn — click through, or import `deploy/certs/cert.pem` to remove the warning, see "Self-signed HTTPS" below). Plain `http://127.0.0.1:8080` redirects to HTTPS automatically.
 
 Keep `APP_ENCRYPTION_KEY` stable and store it in a password manager or secret manager. Losing or changing it makes saved provider keys unreadable. Never commit `.env`.
 
@@ -91,7 +91,28 @@ The safe default binds the app to `127.0.0.1`. To serve it from another machine,
 ```dotenv
 BIND_ADDRESS=0.0.0.0
 APP_PORT=8080
+HTTPS_PORT=8443
 ```
+
+LAN access: `https://<server-ip>:8443`. If the browser still warns about the certificate, regenerate it with the LAN IP included (see below) or import the cert on each device.
+
+## Self-signed HTTPS
+
+A self-signed certificate is bundled at `deploy/certs/cert.pem` (+ `key.pem`, ~2 years validity) and mounted into nginx automatically.
+
+- Regenerate / replace the certificate (e.g. add your LAN IP to the SAN):
+
+  ```bash
+  node scripts/gen-selfsigned-cert.mjs --ip 192.168.1.9
+  docker compose up -d
+  ```
+
+- To stop the browser warning, import `deploy/certs/cert.pem` into the **Trusted Root Certification Authorities** on every device that visits:
+  - Windows: double-click `cert.pem` → Install Certificate → Local Machine → "Trusted Root Certification Authorities".
+  - macOS: double-click to import into Keychain → set to "Always Trust".
+  - Android/iOS: install the cert file, then enable "trust user certificates".
+
+- Self-signed certificates are for **LAN/testing only**. For public internet use a real trusted certificate (Let's Encrypt / Caddy auto-HTTPS).
 
 Before exposing the app to the public internet, place it behind HTTPS and authentication, a VPN, or a zero-trust gateway. CORS is not authentication and does not protect the settings or generation endpoints.
 
