@@ -4,6 +4,7 @@ import { hashPassword, comparePassword, generateToken, verifyToken } from "./aut
 import crypto from "node:crypto";
 import { eq, or } from "drizzle-orm";
 import { sendRegistrationCode } from "./verification.js";
+import { migrateLegacyStoreIfPresent } from "./legacy-migration.js";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { listAgents, runAgent } from "./agents/index.js";
 import { createChapterToolLibraryFingerprint } from "./agents/chapterToolLibraryAgent.js";
@@ -863,6 +864,17 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         .where(eq(verificationCodes.email, email))
         .run();
     });
+
+    // 旧版(单用户)store.json 数据迁移:归第一个注册的账号
+    try {
+      await migrateLegacyStoreIfPresent(newUserId);
+    } catch (error) {
+      console.warn(
+        "[migration] 旧数据迁移失败:",
+        error instanceof Error ? error.message : error,
+      );
+    }
+
     const token = generateToken(newUserId);
     return sendJson(res, 201, {
       token,

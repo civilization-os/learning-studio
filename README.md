@@ -101,14 +101,19 @@ Environment variables are useful for automation or systems where UI-based secret
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
+| `JWT_SECRET` | Token signing secret, **required in production** (fails fast if missing) | fixed local-dev value |
 | `DEEPSEEK_API_KEY` | DeepSeek API credential | — |
 | `DEEPSEEK_BASE_URL` | OpenAI-compatible DeepSeek endpoint | `https://api.deepseek.com` |
 | `TAVILY_API_KEY` | Tavily Web Search credential | — |
 | `APP_ENCRYPTION_KEY` | 32-byte Base64/hex key for Linux credential persistence | — |
+| `APP_DB_PATH` | SQLite database file path | `./data/learning-studio.db` |
+| `APP_STORE_PATH` | Probe path for legacy `store.json` migration only (new builds use SQLite) | — |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` | SMTP config for registration codes; fake/test SMTP servers are fine | unconfigured = no codes in production |
+| `SMTP_ALLOW_INSECURE_TLS` | Set `true` to accept self-signed fake SMTP servers | `false` |
+| `MAIL_ECHO_CODE` | When no SMTP is configured, echo the code back to the client (testing); set `true` to enable | `false` |
 | `PORT` | Local backend port | `8787` |
 | `HOST` | Backend bind address | `127.0.0.1` |
 | `CORS_ORIGINS` | Comma-separated browser origins allowed in split deployments | local Vite origins |
-| `APP_STORE_PATH` | Custom path for the local JSON store | `server/data/store.json` |
 | `VITE_API_BASE_URL` | Frontend API base URL | `/api` |
 
 PowerShell example:

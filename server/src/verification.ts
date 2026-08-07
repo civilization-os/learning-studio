@@ -71,7 +71,10 @@ export async function sendRegistrationCode(rawEmail: string) {
       text: `您的注册验证码是 ${code}，10 分钟内有效。`,
       html: `<p>您的注册验证码是 <strong>${code}</strong>，10 分钟内有效。</p>`,
     });
-  } else if (process.env.NODE_ENV === "production") {
+  } else if (
+    process.env.NODE_ENV === "production" &&
+    process.env.MAIL_ECHO_CODE !== "true"
+  ) {
     db.delete(verificationCodes).where(eq(verificationCodes.email, email)).run();
     throw new Error("邮件服务尚未配置，请联系管理员");
   } else {

@@ -16,7 +16,13 @@ cp deploy/docker.env.example .env
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
-Put the generated value in `.env` as `APP_ENCRYPTION_KEY`, then run:
+Put the generated value in `.env` as `APP_ENCRYPTION_KEY`, then generate and set the login-token signing key (**required in production**; the backend fails to start without it):
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
+```
+
+Put that output in `.env` as `JWT_SECRET`, then run:
 
 ```bash
 docker compose up -d --build
@@ -50,6 +56,7 @@ SMTP_USER=
 SMTP_PASSWORD=
 SMTP_FROM=
 SMTP_ALLOW_INSECURE_TLS=false
+MAIL_ECHO_CODE=false
 ```
 
 - `SMTP_HOST`: SMTP server address. It does **not** have to be a mainstream provider (163/QQ/Gmail). Self-hosted fake mail servers such as Mailpit / MailHog / smtp4dev, or any external SMTP relay, work as long as the address and port are reachable.
@@ -57,6 +64,19 @@ SMTP_ALLOW_INSECURE_TLS=false
 - `SMTP_USER` / `SMTP_PASSWORD`: sender credentials; leave empty for unauthenticated fake SMTP servers.
 - `SMTP_FROM`: sender display address (e.g. `noreply@your-domain.com`). It may be a **non-existent address** — landing in the recipient's spam folder does not affect functionality.
 - `SMTP_ALLOW_INSECURE_TLS`: set to `true` to skip certificate verification when connecting to fake SMTP servers with self-signed/invalid certificates.
+- `MAIL_ECHO_CODE`: testing switch. Set `true` when no SMTP is available at all — the code is echoed on the page and logged (same as local dev mode). Fine for temporary deployments; not recommended for public production.
+
+## Legacy data migration (store.json → SQLite)
+
+New builds store data in SQLite. When upgrading from an older version, any data still in `server/data/store.json` (or a custom `APP_STORE_PATH`) is automatically imported to the **first registered account** (projects, AI/search settings, encrypted API keys); the file is then renamed to `store.json.migrated`.
+
+To assign the legacy data to an **existing** account instead, run:
+
+```bash
+npm run server:build
+node scripts/migrate-store.mjs --email user@example.com
+# or by username: node scripts/migrate-store.mjs --username alice
+```
 
 Restart after changing values:
 

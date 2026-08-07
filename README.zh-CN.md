@@ -101,14 +101,19 @@ docker compose up -d --build
 
 | 变量 | 用途 | 默认值 |
 | --- | --- | --- |
+| `JWT_SECRET` | 登录令牌签名密钥,**生产环境必填**(缺失会启动失败) | 本地开发固定值 |
 | `DEEPSEEK_API_KEY` | DeepSeek API 密钥 | — |
 | `DEEPSEEK_BASE_URL` | OpenAI 兼容的 DeepSeek 接口地址 | `https://api.deepseek.com` |
 | `TAVILY_API_KEY` | Tavily Web Search 密钥 | — |
 | `APP_ENCRYPTION_KEY` | Linux 持久化密钥所需的 32 字节 Base64/十六进制密钥 | — |
+| `APP_DB_PATH` | SQLite 数据库文件路径 | `./data/learning-studio.db` |
+| `APP_STORE_PATH` | 仅用于旧版 `store.json` 迁移时的探测路径(新版已改用 SQLite) | — |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` | 注册验证码邮件 SMTP 配置,可指向假/测试 SMTP 站点 | 未配置则生产环境无法发送验证码 |
+| `SMTP_ALLOW_INSECURE_TLS` | 连接自签证书的假 SMTP 站点时设为 `true` | `false` |
+| `MAIL_ECHO_CODE` | 未配置 SMTP 时允许把验证码直接回显(测试用),设为 `true` 开启 | `false` |
 | `PORT` | 本地后端端口 | `8787` |
 | `HOST` | 后端监听地址 | `127.0.0.1` |
 | `CORS_ORIGINS` | 前后端分离时允许的浏览器来源，逗号分隔 | 本地 Vite 地址 |
-| `APP_STORE_PATH` | 本地 JSON 数据文件自定义路径 | `server/data/store.json` |
 | `VITE_API_BASE_URL` | 前端请求的 API 地址 | `/api` |
 
 PowerShell 示例：
