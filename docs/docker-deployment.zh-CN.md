@@ -100,8 +100,12 @@ docker compose up -d --build
 默认访问地址：
 
 ```text
-http://127.0.0.1:8080
+https://127.0.0.1:8443
 ```
+
+首次访问会提示"证书不受信任/连接不是私密连接"——这是自签证书的正常现象，点"继续访问/高级→继续前往"即可进入。想消除提示，见下文"自签 HTTPS"。
+
+访问 `http://127.0.0.1:8080` 会自动 301 跳转到上面的 HTTPS 地址。
 
 查看状态与日志：
 
@@ -127,6 +131,7 @@ docker compose down
 ```dotenv
 BIND_ADDRESS=0.0.0.0
 APP_PORT=8080
+HTTPS_PORT=8443
 ```
 
 然后重新启动：
@@ -134,6 +139,26 @@ APP_PORT=8080
 ```bash
 docker compose up -d
 ```
+
+局域网访问地址：`https://<服务器IP>:8443`。如果浏览器仍然警告证书不受信任，请重新生成包含该 IP 的证书（见下方"自签 HTTPS"），或在每台访问设备上导入证书。
+
+## 自签 HTTPS
+
+部署自带一份自签证书（`deploy/certs/cert.pem` + `key.pem`），有效期约两年，开箱即用。
+
+- 生成/更换证书（例如把局域网 IP 加进证书，让警告页的"不受信任"更少）：
+
+  ```bash
+  node scripts/gen-selfsigned-cert.mjs --ip 192.168.1.9
+  docker compose up -d   # 重新挂载
+  ```
+
+- 想让浏览器不再警告：在**每台访问设备**上把 `deploy/certs/cert.pem` 导入"受信任的根证书颁发机构"：
+  - Windows：双击 `cert.pem` → 安装证书 → 本地计算机 → 选择"受信任的根证书颁发机构"→ 完成。
+  - macOS：双击导入钥匙串 → 找到该证书 → 设为"始终信任"。
+  - Android/iOS：安装证书文件 → 设置中启用"信任用户证书"。
+
+- 自签证书**仅适合内网/测试**。公开到互联网必须改用受信任证书（Let's Encrypt / Caddy 自动证书等）。
 
 公开到互联网前，必须在外层反向代理、VPN 或零信任网关中增加 HTTPS 与身份验证。CORS 不是访问控制，不能用于保护 API Key 和生成接口。
 

@@ -51,6 +51,10 @@ services:
         condition: service_healthy
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-8080}:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
+    volumes:
+      # 自签证书(deploy/certs/,用 scripts/gen-selfsigned-cert.mjs 重新生成)
+      - ./deploy/certs:/etc/nginx/certs:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
