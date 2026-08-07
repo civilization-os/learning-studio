@@ -2,8 +2,9 @@
 
 FROM node:22-alpine AS source
 WORKDIR /app
-# better-sqlite3@13 的 npm 包自带全平台预编译二进制(含 linuxmusl),
-# npm ci 不会触发源码编译,无需安装 python3/make/g++ 等编译工具
+# better-sqlite3 的 npm 包虽带 prebuilds,npm ci 仍会对它执行 node-gyp rebuild,
+# alpine(musl)下必须能源码编译:装 python3/make/g++
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
