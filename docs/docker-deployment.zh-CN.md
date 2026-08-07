@@ -41,6 +41,34 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 
 DeepSeek 和 Tavily 密钥可以留空，部署后在应用“设置”页面填写；也可以直接写入服务器环境变量。
 
+## 邮件验证码（SMTP）配置
+
+注册验证码通过 SMTP 发送，全部可选。不配置时，生产环境发送验证码会返回“邮件服务尚未配置”。
+
+在 `.env` 中配置：
+
+```dotenv
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+SMTP_ALLOW_INSECURE_TLS=false
+```
+
+- `SMTP_HOST`：SMTP 服务器地址。**不要求是 163/QQ 等正规邮箱服务**，自建 Mailpit / MailHog / smtp4dev 等假邮箱站点、或任意外部 SMTP 都可以，只要地址和端口可达。
+- `SMTP_SECURE`：465 端口或使用 SSL 时设为 `true`。
+- `SMTP_USER` / `SMTP_PASSWORD`：发件账号；无认证的假 SMTP 站点可留空。
+- `SMTP_FROM`：发件人显示地址（如 `noreply@your-domain.com`），可以是**不存在的假地址**——邮件被接收方归入垃圾邮件不影响功能。
+- `SMTP_ALLOW_INSECURE_TLS`：连接自签证书/无有效证书的假 SMTP 站点时设为 `true`，跳过证书校验。
+
+修改后重新启动生效：
+
+```bash
+docker compose up -d
+```
+
 ## 2. 启动
 
 ```bash

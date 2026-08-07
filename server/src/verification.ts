@@ -20,6 +20,11 @@ function createTransport() {
     host,
     port,
     secure: process.env.SMTP_SECURE === "true" || port === 465,
+    // 假/测试 SMTP 站点(如自建 Mailpit、MailHog)常无有效证书,
+    // 通过 SMTP_ALLOW_INSECURE_TLS=true 跳过证书校验。
+    ...(process.env.SMTP_ALLOW_INSECURE_TLS === "true"
+      ? { tls: { rejectUnauthorized: false } }
+      : {}),
     ...(process.env.SMTP_USER
       ? {
           auth: {

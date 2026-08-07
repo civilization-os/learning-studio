@@ -36,6 +36,34 @@ docker compose down
 
 `docker compose down` keeps the data volume. `docker compose down -v` deletes it.
 
+## Email verification codes (SMTP)
+
+Registration codes are sent over SMTP. All variables are optional; without them the production backend refuses to send codes ("邮件服务尚未配置").
+
+Configure in `.env`:
+
+```dotenv
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+SMTP_ALLOW_INSECURE_TLS=false
+```
+
+- `SMTP_HOST`: SMTP server address. It does **not** have to be a mainstream provider (163/QQ/Gmail). Self-hosted fake mail servers such as Mailpit / MailHog / smtp4dev, or any external SMTP relay, work as long as the address and port are reachable.
+- `SMTP_SECURE`: set to `true` for port 465 or SSL.
+- `SMTP_USER` / `SMTP_PASSWORD`: sender credentials; leave empty for unauthenticated fake SMTP servers.
+- `SMTP_FROM`: sender display address (e.g. `noreply@your-domain.com`). It may be a **non-existent address** — landing in the recipient's spam folder does not affect functionality.
+- `SMTP_ALLOW_INSECURE_TLS`: set to `true` to skip certificate verification when connecting to fake SMTP servers with self-signed/invalid certificates.
+
+Restart after changing values:
+
+```bash
+docker compose up -d
+```
+
 ## Network exposure
 
 The safe default binds the app to `127.0.0.1`. To serve it from another machine, set these values in `.env`:
